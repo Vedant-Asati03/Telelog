@@ -14,38 +14,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run Rust tests
         run: cargo test --all-features
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-      - name: Create virtual environment
-        run: python -m venv .venv
-      - name: Upgrade pip
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            .venv\Scripts\python.exe -m pip install --upgrade pip
-          else
-            .venv/bin/python -m pip install --upgrade pip
-          fi
-        shell: bash
-      - name: Install maturin and pytest
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            .venv\Scripts\python.exe -m pip install maturin pytest
-          else
-            .venv/bin/python -m pip install maturin pytest
-          fi
-        shell: bash
-      - name: Build Python module
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            .venv\Scripts\python.exe -m maturin develop
-          else
-            .venv/bin/python -m maturin develop
-          fi
-        shell: bash
 
   # Build Python wheels for multiple platforms
   build-wheels:
@@ -98,41 +78,53 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Create virtual environment
-        run: python -m venv .venv
-      - name: Upgrade pip
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/release.yml') }}
+
+      - name: Install Python dependencies
         run: |
+          python -m venv .venv
           if [ "${{ runner.os }}" = "Windows" ]; then
             .venv\Scripts\python.exe -m pip install --upgrade pip
-          else
-            .venv/bin/python -m pip install --upgrade pip
-          fi
-        shell: bash
-      - name: Install maturin
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
             .venv\Scripts\python.exe -m pip install maturin
           else
+            .venv/bin/python -m pip install --upgrade pip
             .venv/bin/python -m pip install maturin
           fi
         shell: bash
 
       - name: Build wheels
         run: |
-          set -e
           if [ "${{ runner.os }}" = "Windows" ]; then
             PY=.venv\Scripts\python.exe
           else
             PY=.venv/bin/python
           fi
-          if $PY -m maturin build --release --target ${{ matrix.target }} --out dist; then
+          output=$($PY -m maturin build --release --target ${{ matrix.target }} --out dist 2>&1)
+          exit_code=$?
+          if [ $exit_code -eq 0 ]; then
             echo "Wheel build succeeded."
           else
-            if $PY -m maturin build --release --target ${{ matrix.target }} --out dist 2>&1 | grep -q "Couldn't find any python interpreters"; then
+            if echo "$output" | grep -q "Couldn't find any python interpreters"; then
               echo "No compatible Python interpreter for target ${{ matrix.target }}, skipping wheel build."
               exit 0
             else
               echo "Wheel build failed for another reason."
+              echo "$output"
               exit 1
             fi
           fi
@@ -162,23 +154,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Create virtual environment
-        run: python -m venv .venv
-      - name: Upgrade pip
+      - name: Install Python dependencies
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            .venv\Scripts\python.exe -m pip install --upgrade pip
-          else
-            .venv/bin/python -m pip install --upgrade pip
-          fi
-        shell: bash
-      - name: Install maturin
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            .venv\Scripts\python.exe -m pip install maturin
-          else
-            .venv/bin/python -m pip install maturin
-          fi
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install maturin
         shell: bash
 
       - name: Check PyPI token
@@ -188,25 +168,14 @@ jobs:
             exit 1
           fi
       - name: Publish to PyPI
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            PY=.venv\Scripts\python.exe
-          else
-            PY=.venv/bin/python
-          fi
-          PKG_NAME=$($PY -c "import toml; print(toml.load('pyproject.toml')['project']['name'])")
-          PKG_VERSION=$($PY -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
-          if $PY -m pip install --disable-pip-version-check --index-url https://pypi.org/simple/ "$PKG_NAME==$PKG_VERSION" 2>/dev/null; then
-            echo "Version $PKG_VERSION of $PKG_NAME already exists on PyPI, skipping publish."
-            exit 0
-          fi
-          $PY -m maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
-        shell: bash
+        run: .venv/bin/python -m maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
 
   # Create GitHub release
   github-release:
     needs: [release-python]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -220,7 +189,7 @@ jobs:
           if [ ! -d dist ] || [ -z "$(ls -A dist)" ]; then echo "No wheels found in dist/" && exit 1; fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
