@@ -1,7 +1,7 @@
 //! Configuration management for telelog
 
 use crate::level::LogLevel;
-use crate::visualization::{ChartConfig, ChartType, OutputFormat};
+use crate::visualization::{ChartConfig, ChartType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -230,8 +230,7 @@ impl Config {
         let chart_config = ChartConfig::new()
             .with_chart_type(ChartType::Timeline)
             .with_timing(true)
-            .with_memory(true)
-            .with_output_format(OutputFormat::Svg);
+            .with_memory(true);
 
         Self::new()
             .with_min_level(LogLevel::Debug)
