@@ -130,6 +130,11 @@ impl Logger {
         &self.name
     }
 
+    /// Get the component tracker for visualization
+    pub fn get_component_tracker(&self) -> &ComponentTracker {
+        &self.component_tracker
+    }
+
     /// Update the logger configuration
     pub fn set_config(&self, config: Config) {
         if let Err(e) = config.validate() {
