@@ -33,25 +33,6 @@ jobs:
       - name: Build Python module
         run: .venv/bin/maturin develop
 
-  # Release Rust crate to crates.io
-  release-rust:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Publish to crates.io
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="telelog") | .version')
-          if cargo search telelog | grep -q "^telelog = \"$VERSION\""; then
-            echo "Version $VERSION already exists on crates.io, skipping publish."
-            exit 0
-          fi
-          cargo publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
   # Build Python wheels for multiple platforms
   build-wheels:
     needs: test
@@ -115,7 +96,19 @@ jobs:
         run: .venv/bin/pip install maturin
 
       - name: Build wheels
-        run: .venv/bin/maturin build --release --target ${{ matrix.target }} --out dist
+        run: |
+          set -e
+          if .venv/bin/maturin build --release --target ${{ matrix.target }} --out dist; then
+            echo "Wheel build succeeded."
+          else
+            if grep -q 'Couldn\'t find any python interpreters' <<<"$(.venv/bin/maturin build --release --target ${{ matrix.target }} --out dist 2>&1)"; then
+              echo "No compatible Python interpreter for target ${{ matrix.target }}, skipping wheel build."
+              exit 0
+            else
+              echo "Wheel build failed for another reason."
+              exit 1
+            fi
+          fi
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
@@ -170,13 +163,13 @@ jobs:
 
   # Create GitHub release
   github-release:
-    needs: [release-rust, release-python]
+    needs: [release-python]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: wheels
           path: dist/
