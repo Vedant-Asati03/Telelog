@@ -42,7 +42,7 @@ fn main() {
         .generate_diagram(tracker)
         .unwrap_or_else(|e| format!("Error: {}", e));
     println!("✅ Flowchart generated ({} chars)", flowchart.len());
-
+    
     // Generate timeline
     let timeline_config = ChartConfig::new().with_chart_type(ChartType::Timeline);
     let timeline_generator = MermaidGenerator::new(timeline_config);
@@ -50,7 +50,7 @@ fn main() {
         .generate_diagram(tracker)
         .unwrap_or_else(|e| format!("Error: {}", e));
     println!("✅ Timeline generated ({} chars)", timeline.len());
-
+    
     // Generate Gantt chart
     let gantt_config = ChartConfig::new().with_chart_type(ChartType::Gantt);
     let gantt_generator = MermaidGenerator::new(gantt_config);
@@ -59,6 +59,26 @@ fn main() {
         .unwrap_or_else(|e| format!("Error: {}", e));
     println!("✅ Gantt chart generated ({} chars)", gantt.len());
 
-    println!("✅ Visualization example finished");
-    println!("💡 Paste the generated content into https://mermaid.live/ to view");
+    // Display the generated charts
+    println!("\n📊 Generated Charts:");
+    println!("\n🔸 FLOWCHART:");
+    println!("{}", flowchart);
+    
+    println!("\n🔸 TIMELINE:");
+    println!("{}", timeline);
+    
+    println!("\n🔸 GANTT CHART:");
+    println!("{}", gantt);
+
+    // Save to files
+    use std::fs;
+    fs::create_dir_all("./viz_output").ok();
+    
+    fs::write("./viz_output/flowchart.mmd", &flowchart).ok();
+    fs::write("./viz_output/timeline.mmd", &timeline).ok();
+    fs::write("./viz_output/gantt.mmd", &gantt).ok();
+
+    println!("\n✅ Visualization example finished");
+    println!("� Charts saved to ./viz_output/ directory");
+    println!("💡 View at: https://mermaid.live/ or in VS Code with Mermaid extension");
 }

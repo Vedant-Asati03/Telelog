@@ -29,15 +29,34 @@ def main():
     
     flowchart = logger.generate_visualization("flowchart")
     print(f"✅ Flowchart generated ({len(flowchart)} chars)")
+    print(f"📄 Flowchart content:\n{flowchart}\n")
     
     timeline = logger.generate_visualization("timeline")
     print(f"✅ Timeline generated ({len(timeline)} chars)")
+    print(f"📄 Timeline content:\n{timeline}\n")
     
     gantt = logger.generate_visualization("gantt")
     print(f"✅ Gantt chart generated ({len(gantt)} chars)")
+    print(f"📄 Gantt content:\n{gantt}\n")
+    
+    # Save charts to files
+    import os
+    os.makedirs("./viz_output", exist_ok=True)
+    
+    with open("./viz_output/flowchart.mmd", "w") as f:
+        f.write(flowchart)
+    print("💾 Flowchart saved to ./viz_output/flowchart.mmd")
+    
+    with open("./viz_output/timeline.mmd", "w") as f:
+        f.write(timeline)
+    print("💾 Timeline saved to ./viz_output/timeline.mmd")
+    
+    with open("./viz_output/gantt.mmd", "w") as f:
+        f.write(gantt)
+    print("💾 Gantt chart saved to ./viz_output/gantt.mmd")
     
     print("✅ Visualization example finished")
-    print("💡 Paste the generated content into https://mermaid.live/ to view")
+    print("💡 View the saved .mmd files or paste content into https://mermaid.live/")
 
 if __name__ == "__main__":
     main()
