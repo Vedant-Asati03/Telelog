@@ -101,7 +101,7 @@ jobs:
           if .venv/bin/maturin build --release --target ${{ matrix.target }} --out dist; then
             echo "Wheel build succeeded."
           else
-            if grep -q 'Couldn\'t find any python interpreters' <<<"$(.venv/bin/maturin build --release --target ${{ matrix.target }} --out dist 2>&1)"; then
+            if grep -q "Couldn't find any python interpreters" <<<"$(.venv/bin/maturin build --release --target ${{ matrix.target }} --out dist 2>&1)"; then
               echo "No compatible Python interpreter for target ${{ matrix.target }}, skipping wheel build."
               exit 0
             else
