@@ -20,18 +20,22 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      - name: Install maturin
-        run: pip install maturin pytest
       - name: Create virtual environment
         run: python -m venv .venv
       - name: Activate virtual environment
         run: |
           echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
           echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+      - name: Upgrade pip
+        run: .venv/bin/pip install --upgrade pip
+      - name: Install maturin and pytest
+        run: .venv/bin/pip install maturin pytest
       - name: Build Python module
-        run: maturin develop
+        run: .venv/bin/maturin develop
       - name: Run Python tests
-        run: python -m pytest tests/
+        run: .venv/bin/python -m pytest tests/
+        env:
+          PYTHONPATH: ${{ github.workspace }}
 
   # Release Rust crate to crates.io
   release-rust:
@@ -97,11 +101,19 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Create virtual environment
+        run: python -m venv .venv
+      - name: Activate virtual environment
+        run: |
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+      - name: Upgrade pip
+        run: .venv/bin/pip install --upgrade pip
       - name: Install maturin
-        run: pip install maturin
+        run: .venv/bin/pip install maturin
 
       - name: Build wheels
-        run: maturin build --release --target ${{ matrix.target }} --out dist
+        run: .venv/bin/maturin build --release --target ${{ matrix.target }} --out dist
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v3
@@ -127,11 +139,25 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Create virtual environment
+        run: python -m venv .venv
+      - name: Activate virtual environment
+        run: |
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
+      - name: Upgrade pip
+        run: .venv/bin/pip install --upgrade pip
       - name: Install maturin
-        run: pip install maturin
+        run: .venv/bin/pip install maturin
 
+      - name: Check PyPI token
+        run: |
+          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "Error: PYPI_API_TOKEN secret is not set."
+            exit 1
+          fi
       - name: Publish to PyPI
-        run: maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
+        run: .venv/bin/maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
 
   # Create GitHub release
   github-release:
@@ -145,6 +171,9 @@ jobs:
         with:
           name: wheels
           path: dist/
+      - name: Check wheels exist
+        run: |
+          if [ ! -d dist ] || [ -z "$(ls -A dist)" ]; then echo "No wheels found in dist/" && exit 1; fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
