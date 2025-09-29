@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 /// Chart configuration for Mermaid visualization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,8 +20,6 @@ pub struct ChartConfig {
     pub show_memory: bool,
     /// Include metadata in nodes
     pub show_metadata: bool,
-    /// Output format
-    pub output_format: OutputFormat,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,16 +44,6 @@ pub enum Direction {
     RightLeft,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum OutputFormat {
-    /// SVG format
-    Svg,
-    /// PNG format
-    Png,
-    /// PDF format
-    Pdf,
-}
-
 impl Default for ChartConfig {
     fn default() -> Self {
         Self {
@@ -65,7 +52,6 @@ impl Default for ChartConfig {
             show_timing: true,
             show_memory: false,
             show_metadata: false,
-            output_format: OutputFormat::Svg,
         }
     }
 }
@@ -99,11 +85,6 @@ impl ChartConfig {
         self.show_metadata = show_metadata;
         self
     }
-
-    pub fn with_output_format(mut self, format: OutputFormat) -> Self {
-        self.output_format = format;
-        self
-    }
 }
 
 impl Direction {
@@ -113,16 +94,6 @@ impl Direction {
             Direction::BottomUp => "BT",
             Direction::LeftRight => "LR",
             Direction::RightLeft => "RL",
-        }
-    }
-}
-
-impl OutputFormat {
-    fn extension(&self) -> &'static str {
-        match self {
-            OutputFormat::Svg => "svg",
-            OutputFormat::Png => "png",
-            OutputFormat::Pdf => "pdf",
         }
     }
 }
@@ -316,7 +287,7 @@ impl MermaidGenerator {
             }
         }
 
-        // Join with line breaks and wrap in quotes
+        // Join with <br/> tags for HTML-style line breaks in Mermaid
         format!("[\"{}\"]", parts.join("<br/>"))
     }
 
@@ -341,54 +312,13 @@ impl MermaidGenerator {
         }
     }
 
-    /// Generate diagram and save to file
-    pub fn save_diagram(
-        &self,
-        tracker: &ComponentTracker,
-        output_path: &Path,
-    ) -> Result<(), String> {
+    /// Generate diagram and save to .mmd file
+    pub fn save_mmd(&self, tracker: &ComponentTracker, output_path: &Path) -> Result<(), String> {
         let diagram = self.generate_diagram(tracker)?;
-
-        // Create temporary mermaid file
-        let temp_mmd = output_path.with_extension("mmd");
-        fs::write(&temp_mmd, diagram)
+        let mmd_path = output_path.with_extension("mmd");
+        fs::write(&mmd_path, diagram)
             .map_err(|e| format!("Failed to write mermaid file: {}", e))?;
-
-        // Use mermaid CLI to generate output
-        let output_file = output_path.with_extension(self.config.output_format.extension());
-        let mut cmd = Command::new("mmdc");
-        cmd.args([
-            "-i",
-            temp_mmd.to_str().unwrap(),
-            "-o",
-            output_file.to_str().unwrap(),
-        ]);
-
-        let output = cmd.output().map_err(|e| {
-            format!(
-                "Failed to run mermaid CLI: {}. Make sure 'mmdc' is installed.",
-                e
-            )
-        })?;
-
-        if !output.status.success() {
-            let error = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Mermaid CLI failed: {}", error));
-        }
-
-        // Clean up temporary file
-        let _ = fs::remove_file(temp_mmd);
-
         Ok(())
-    }
-
-    /// Check if mermaid CLI is available
-    pub fn check_mermaid_cli() -> bool {
-        Command::new("mmdc")
-            .arg("--version")
-            .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
     }
 }
 
@@ -415,7 +345,7 @@ mod tests {
         let generator = MermaidGenerator::default();
         let diagram = generator.generate_diagram(&tracker).unwrap();
 
-        assert!(diagram.contains("flowchart TD"));
+        assert!(diagram.contains("flowchart TB"));
         assert!(diagram.contains("Parent"));
         assert!(diagram.contains("Child"));
         assert!(diagram.contains("-->"));
