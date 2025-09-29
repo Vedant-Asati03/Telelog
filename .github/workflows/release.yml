@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   # Build and test before releasing
@@ -21,6 +22,12 @@ jobs:
           python-version: "3.11"
       - name: Install maturin
         run: pip install maturin pytest
+      - name: Create virtual environment
+        run: python -m venv .venv
+      - name: Activate virtual environment
+        run: |
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
       - name: Build Python module
         run: maturin develop
       - name: Run Python tests
