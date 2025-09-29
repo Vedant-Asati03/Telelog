@@ -62,7 +62,7 @@ pub use level::LogLevel;
 pub use logger::Logger;
 pub use output::{BufferedOutput, LogMessage};
 pub use profile::ProfileGuard;
-pub use visualization::{ChartConfig, ChartType, Direction, MermaidGenerator, OutputFormat};
+pub use visualization::{ChartConfig, ChartType, Direction, MermaidGenerator};
 
 #[cfg(feature = "async")]
 pub use async_output::AsyncOutput;
