@@ -22,16 +22,30 @@ jobs:
           python-version: "3.11"
       - name: Create virtual environment
         run: python -m venv .venv
-      - name: Activate virtual environment
-        run: |
-          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
       - name: Upgrade pip
-        run: .venv/bin/pip install --upgrade pip
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install --upgrade pip
+          else
+            .venv/bin/python -m pip install --upgrade pip
+          fi
+        shell: bash
       - name: Install maturin and pytest
-        run: .venv/bin/pip install maturin pytest
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install maturin pytest
+          else
+            .venv/bin/python -m pip install maturin pytest
+          fi
+        shell: bash
       - name: Build Python module
-        run: .venv/bin/maturin develop
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m maturin develop
+          else
+            .venv/bin/python -m maturin develop
+          fi
+        shell: bash
 
   # Build Python wheels for multiple platforms
   build-wheels:
@@ -86,22 +100,35 @@ jobs:
 
       - name: Create virtual environment
         run: python -m venv .venv
-      - name: Activate virtual environment
-        run: |
-          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
       - name: Upgrade pip
-        run: .venv/bin/pip install --upgrade pip
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install --upgrade pip
+          else
+            .venv/bin/python -m pip install --upgrade pip
+          fi
+        shell: bash
       - name: Install maturin
-        run: .venv/bin/pip install maturin
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install maturin
+          else
+            .venv/bin/python -m pip install maturin
+          fi
+        shell: bash
 
       - name: Build wheels
         run: |
           set -e
-          if .venv/bin/maturin build --release --target ${{ matrix.target }} --out dist; then
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PY=.venv\Scripts\python.exe
+          else
+            PY=.venv/bin/python
+          fi
+          if $PY -m maturin build --release --target ${{ matrix.target }} --out dist; then
             echo "Wheel build succeeded."
           else
-            if grep -q "Couldn't find any python interpreters" <<<"$(.venv/bin/maturin build --release --target ${{ matrix.target }} --out dist 2>&1)"; then
+            if $PY -m maturin build --release --target ${{ matrix.target }} --out dist 2>&1 | grep -q "Couldn't find any python interpreters"; then
               echo "No compatible Python interpreter for target ${{ matrix.target }}, skipping wheel build."
               exit 0
             else
@@ -109,6 +136,7 @@ jobs:
               exit 1
             fi
           fi
+        shell: bash
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
@@ -136,14 +164,22 @@ jobs:
 
       - name: Create virtual environment
         run: python -m venv .venv
-      - name: Activate virtual environment
-        run: |
-          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> $GITHUB_ENV
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> $GITHUB_PATH
       - name: Upgrade pip
-        run: .venv/bin/pip install --upgrade pip
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install --upgrade pip
+          else
+            .venv/bin/python -m pip install --upgrade pip
+          fi
+        shell: bash
       - name: Install maturin
-        run: .venv/bin/pip install maturin
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            .venv\Scripts\python.exe -m pip install maturin
+          else
+            .venv/bin/python -m pip install maturin
+          fi
+        shell: bash
 
       - name: Check PyPI token
         run: |
@@ -153,13 +189,19 @@ jobs:
           fi
       - name: Publish to PyPI
         run: |
-          PKG_NAME=$(python3 -c "import toml; print(toml.load('pyproject.toml')['project']['name'])")
-          PKG_VERSION=$(python3 -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
-          if python3 -m pip install --disable-pip-version-check --index-url https://pypi.org/simple/ "$PKG_NAME==$PKG_VERSION" 2>/dev/null; then
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PY=.venv\Scripts\python.exe
+          else
+            PY=.venv/bin/python
+          fi
+          PKG_NAME=$($PY -c "import toml; print(toml.load('pyproject.toml')['project']['name'])")
+          PKG_VERSION=$($PY -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          if $PY -m pip install --disable-pip-version-check --index-url https://pypi.org/simple/ "$PKG_NAME==$PKG_VERSION" 2>/dev/null; then
             echo "Version $PKG_VERSION of $PKG_NAME already exists on PyPI, skipping publish."
             exit 0
           fi
-          .venv/bin/maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
+          $PY -m maturin publish --skip-existing --username __token__ --password ${{ secrets.PYPI_API_TOKEN }} dist/*
+        shell: bash
 
   # Create GitHub release
   github-release:
