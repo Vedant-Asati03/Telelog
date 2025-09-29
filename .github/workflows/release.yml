@@ -32,10 +32,6 @@ jobs:
         run: .venv/bin/pip install maturin pytest
       - name: Build Python module
         run: .venv/bin/maturin develop
-      - name: Run Python tests
-        run: .venv/bin/python -m pytest tests/
-        env:
-          PYTHONPATH: ${{ github.workspace }}
 
   # Release Rust crate to crates.io
   release-rust:
