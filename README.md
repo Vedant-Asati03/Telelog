@@ -1,7 +1,5 @@
 ![](./assets/mascot.png)
 
-# Telelog
-
 **High-performance structured logging library with component tracking and visualization**
 
 Telelog is a Rust-first logging library that combines structured logging, performance profiling, and architectural visualization. It provides rich console output and generates Mermaid diagrams to help you understand your application's execution flow.
