@@ -61,6 +61,7 @@ jobs:
       - name: Test wheel import
         run: |
           pip install dist/*.whl --force-reinstall
+            cd /tmp
           python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
@@ -97,6 +98,7 @@ jobs:
         shell: bash
         run: |
           pip install dist/*.whl --force-reinstall
+            cd /tmp
           python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
@@ -132,6 +134,7 @@ jobs:
       - name: Test wheel import
         run: |
           pip install dist/*.whl --force-reinstall
+            cd /tmp
           python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
