@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  PACKAGE_NAME: your_package # CHANGE THIS to your actual package name
+  PACKAGE_NAME: telelog_python
 
 jobs:
   # Run tests before building anything
