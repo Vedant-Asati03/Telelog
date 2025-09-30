@@ -48,7 +48,7 @@ logger.info("Processing request"); // Includes context
 
 ```bash
 # Install via pip
-pip install telelog
+pip install telelog-python
 ```
 
 ```python
