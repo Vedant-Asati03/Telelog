@@ -39,14 +39,22 @@ jobs:
   build-linux:
     needs: test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: x86_64
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter python${{ matrix.python-version }}
           sccache: "true"
           manylinux: auto
 
@@ -58,7 +66,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-linux-x86_64
+          name: wheels-linux-x86_64-py${{ matrix.python-version }}
           path: dist/*.whl
           if-no-files-found: error
           retention-days: 30
@@ -67,14 +75,22 @@ jobs:
   build-windows:
     needs: test
     runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: x64
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter python${{ matrix.python-version }}
           sccache: "true"
 
       - name: Test wheel import
@@ -86,50 +102,31 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-x64
+          name: wheels-windows-x64-py${{ matrix.python-version }}
           path: dist/*.whl
           if-no-files-found: error
           retention-days: 30
 
-  # Build Python wheels for macOS Intel (x86_64)
-  build-macos-intel:
-    needs: test
-    runs-on: macos-13 # Intel runner
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: x86_64
-          args: --release --out dist --find-interpreter
-          sccache: "true"
-
-      - name: Test wheel import
-        run: |
-          pip install dist/*.whl --force-reinstall
-          python -c "import ${{ env.PACKAGE_NAME }}; print(f'Successfully imported {${{ env.PACKAGE_NAME }}.__name__}')"
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-x86_64
-          path: dist/*.whl
-          if-no-files-found: error
-          retention-days: 30
-
-  # Build Python wheels for macOS Apple Silicon (aarch64)
+  # Build Python wheels for macOS Apple Silicon only (aarch64)
   build-macos-arm:
     needs: test
     runs-on: macos-14 # ARM64 runner (Apple Silicon)
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: aarch64
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter python${{ matrix.python-version }}
           sccache: "true"
 
       - name: Test wheel import
@@ -140,7 +137,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-aarch64
+          name: wheels-macos-aarch64-py${{ matrix.python-version }}
           path: dist/*.whl
           if-no-files-found: error
           retention-days: 30
@@ -169,14 +166,7 @@ jobs:
   # Publish to PyPI using Trusted Publishing (OIDC)
   release-pypi:
     name: Publish to PyPI
-    needs:
-      [
-        build-linux,
-        build-windows,
-        build-macos-intel,
-        build-macos-arm,
-        build-sdist,
-      ]
+    needs: [build-linux, build-windows, build-macos-arm, build-sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:
@@ -216,14 +206,7 @@ jobs:
   # Create GitHub Release (independent of PyPI publishing)
   release-github:
     name: Create GitHub Release
-    needs:
-      [
-        build-linux,
-        build-windows,
-        build-macos-intel,
-        build-macos-arm,
-        build-sdist,
-      ]
+    needs: [build-linux, build-windows, build-macos-arm, build-sdist]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:
