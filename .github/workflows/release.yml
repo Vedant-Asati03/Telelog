@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  PACKAGE_NAME: telelog
+  PYTHON_IMPORT_NAME: telelog
 
 jobs:
   # Run tests before building anything
@@ -61,7 +61,7 @@ jobs:
       - name: Test wheel import
         run: |
           pip install dist/*.whl --force-reinstall
-          python -c "import ${{ env.PACKAGE_NAME }}; print(f'Successfully imported {${{ env.PACKAGE_NAME }}.__name__}')"
+          python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
         shell: bash
         run: |
           pip install dist/*.whl --force-reinstall
-          python -c "import ${{ env.PACKAGE_NAME }}; print(f'Successfully imported {${{ env.PACKAGE_NAME }}.__name__}')"
+          python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -132,7 +132,7 @@ jobs:
       - name: Test wheel import
         run: |
           pip install dist/*.whl --force-reinstall
-          python -c "import ${{ env.PACKAGE_NAME }}; print(f'Successfully imported {${{ env.PACKAGE_NAME }}.__name__}')"
+          python -c "import ${{ env.PYTHON_IMPORT_NAME }}; print(f'Successfully imported {${{ env.PYTHON_IMPORT_NAME }}.__name__}')"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
