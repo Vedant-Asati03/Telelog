@@ -118,6 +118,20 @@ let diagram = generator.generate_diagram(tracker)?;
 
 View generated diagrams at [mermaid.live](https://mermaid.live/) or in VS Code with the Mermaid extension.
 
+## Documentation
+
+📖 **Comprehensive documentation is available in the [Telelog Wiki](https://github.com/Vedant-Asati03/Telelog/wiki)**
+
+The wiki includes:
+- Getting started guides for both Rust and Python
+- Detailed feature documentation (profiling, component tracking, visualization)
+- Configuration and customization guides
+- Cookbook with real-world examples
+- Framework integration guides (Flask, FastAPI, Axum, Actix, etc.)
+- Complete API references
+- Migration guides from other logging libraries
+- Troubleshooting and FAQ
+
 ## Examples
 
 See the [`examples/`](examples/) directory for comprehensive usage examples in both Rust and Python.
