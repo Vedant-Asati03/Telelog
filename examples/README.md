@@ -73,3 +73,16 @@ python examples/python/async_logging.py
 - Each example is **self-contained** and can be run independently
 - Copy patterns from examples that match your use case
 - Use visualization examples to debug performance issues
+
+## 📖 More Documentation
+
+For comprehensive documentation, visit the **[Telelog Wiki](https://github.com/Vedant-Asati03/Telelog/wiki)**:
+
+- **[Getting Started - Rust](../../../wiki/Getting-Started-Rust)** - Installation and quick start for Rust
+- **[Getting Started - Python](../../../wiki/Getting-Started-Python)** - Installation and quick start for Python
+- **[Cookbook and Recipes](../../../wiki/Cookbook-and-Recipes)** - Real-world usage patterns
+- **[Framework Integration](../../../wiki/Framework-Integration)** - Web framework integration guides
+- **[API References](../../../wiki/Rust-API-Reference)** - Complete API documentation
+- **[Troubleshooting](../../../wiki/Troubleshooting)** - Common issues and solutions
+
+The wiki provides detailed explanations, advanced usage patterns, and production deployment guides that go beyond these basic examples.
