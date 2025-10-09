@@ -1,4 +1,9 @@
-//! Python bindings for telelog
+//! Python bindings for telelog via PyO3.
+//!
+//! Provides Python-friendly wrappers around the core Rust functionality,
+//! including logging, configuration, profiling, and visualization.
+//!
+//! Requires the `python` feature to be enabled.
 
 #![allow(non_local_definitions)]
 
@@ -6,11 +11,86 @@
 use pyo3::prelude::*;
 
 #[cfg(feature = "python")]
+use std::collections::HashMap;
+
+#[cfg(feature = "python")]
 use crate::Logger as RustLogger;
+
+#[cfg(feature = "python")]
+use crate::config::Config as RustConfig;
+
+#[cfg(feature = "python")]
+use crate::level::LogLevel;
 
 #[cfg(feature = "python")]
 use crate::visualization::{ChartConfig, ChartType, Direction, MermaidGenerator};
 
+/// Python-exposed configuration for telelog logger.
+#[cfg(feature = "python")]
+#[pyclass]
+pub struct Config {
+    inner: RustConfig,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl Config {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: RustConfig::new(),
+        }
+    }
+
+    /// Set minimum log level (debug, info, warning, error, critical)
+    fn with_min_level(&mut self, level: &str) -> PyResult<()> {
+        let log_level = match level.to_lowercase().as_str() {
+            "debug" => LogLevel::Debug,
+            "info" => LogLevel::Info,
+            "warning" | "warn" => LogLevel::Warning,
+            "error" => LogLevel::Error,
+            "critical" | "crit" => LogLevel::Critical,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Invalid log level: {}",
+                    level
+                )))
+            }
+        };
+        self.inner = self.inner.clone().with_min_level(log_level);
+        Ok(())
+    }
+
+    fn with_console_output(&mut self, enabled: bool) {
+        self.inner = self.inner.clone().with_console_output(enabled);
+    }
+
+    fn with_file_output(&mut self, path: &str) {
+        self.inner = self.inner.clone().with_file_output(path);
+    }
+
+    fn with_json_format(&mut self, enabled: bool) {
+        self.inner = self.inner.clone().with_json_format(enabled);
+    }
+
+    fn with_colored_output(&mut self, enabled: bool) {
+        self.inner = self.inner.clone().with_colored_output(enabled);
+    }
+
+    fn with_profiling(&mut self, enabled: bool) {
+        self.inner = self.inner.clone().with_profiling(enabled);
+    }
+
+    fn with_buffering(&mut self, enabled: bool) {
+        self.inner = self.inner.clone().with_buffering(enabled);
+    }
+
+    fn with_buffer_size(&mut self, size: usize) {
+        self.inner = self.inner.clone().with_buffer_size(size);
+    }
+}
+
+/// Python-exposed logger for structured logging and profiling.
 #[cfg(feature = "python")]
 #[pyclass]
 pub struct Logger {
@@ -25,6 +105,27 @@ impl Logger {
         Self {
             inner: RustLogger::new(name),
         }
+    }
+
+    #[staticmethod]
+    fn with_config(name: &str, config: &Config) -> Self {
+        Self {
+            inner: RustLogger::with_config(name, config.inner.clone()),
+        }
+    }
+
+    fn get_config(&self) -> Config {
+        Config {
+            inner: self.inner.get_config(),
+        }
+    }
+
+    fn set_config(&self, config: &Config) {
+        self.inner.set_config(config.inner.clone());
+    }
+
+    fn name(&self) -> String {
+        self.inner.name().to_string()
     }
 
     fn debug(&self, message: &str) {
@@ -47,7 +148,36 @@ impl Logger {
         self.inner.critical(message);
     }
 
-    /// Log with structured data
+    fn debug_with(&self, message: &str, data: Vec<(String, String)>) {
+        let data_refs: Vec<(&str, &str)> =
+            data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        self.inner.debug_with(message, &data_refs);
+    }
+
+    fn info_with(&self, message: &str, data: Vec<(String, String)>) {
+        let data_refs: Vec<(&str, &str)> =
+            data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        self.inner.info_with(message, &data_refs);
+    }
+
+    fn warning_with(&self, message: &str, data: Vec<(String, String)>) {
+        let data_refs: Vec<(&str, &str)> =
+            data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        self.inner.warning_with(message, &data_refs);
+    }
+
+    fn error_with(&self, message: &str, data: Vec<(String, String)>) {
+        let data_refs: Vec<(&str, &str)> =
+            data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        self.inner.error_with(message, &data_refs);
+    }
+
+    fn critical_with(&self, message: &str, data: Vec<(String, String)>) {
+        let data_refs: Vec<(&str, &str)> =
+            data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        self.inner.critical_with(message, &data_refs);
+    }
+
     fn log_with(&self, level: &str, message: &str, data: Vec<(String, String)>) -> PyResult<()> {
         let data_refs: Vec<(&str, &str)> =
             data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
@@ -80,17 +210,37 @@ impl Logger {
         self.inner.clear_context();
     }
 
-    /// Create a performance profiling context manager
+    /// Add temporary context that will be automatically removed when exiting the context manager.
+    ///
+    /// # Example
+    /// ```python
+    /// with logger.with_context("request_id", "12345"):
+    ///     logger.info("Processing request")  # includes request_id
+    /// # request_id is automatically removed here
+    /// ```
+    fn with_context(&self, key: &str, value: &str) -> ContextManager {
+        self.inner.add_context(key, value);
+        ContextManager {
+            key: key.to_string(),
+            logger: self.inner.clone(),
+        }
+    }
+
     fn profile(&self, operation: &str) -> ProfileContext {
         ProfileContext {
             guard: Some(self.inner.profile(operation)),
         }
     }
 
-    /// Create a component tracking context manager
     fn track_component(&self, name: &str) -> ComponentContext {
         ComponentContext {
             guard: Some(self.inner.track_component(name)),
+        }
+    }
+
+    fn get_component_tracker(&self) -> ComponentTrackerWrapper {
+        ComponentTrackerWrapper {
+            tracker: self.inner.component_tracker().clone(),
         }
     }
 
@@ -142,18 +292,68 @@ impl Logger {
     }
 }
 
+/// Wrapper for component tracker access from Python.
+#[cfg(feature = "python")]
+#[pyclass]
+pub struct ComponentTrackerWrapper {
+    tracker: std::sync::Arc<crate::component::ComponentTracker>,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl ComponentTrackerWrapper {
+    /// Get all tracked components as a list of dictionaries
+    fn get_all_components(&self) -> Vec<HashMap<String, String>> {
+        let components = self.tracker.get_components();
+        components
+            .values()
+            .map(|c| {
+                let mut map = HashMap::new();
+                map.insert("id".to_string(), c.id.clone());
+                map.insert("name".to_string(), c.name.clone());
+                map.insert("status".to_string(), format!("{:?}", c.status));
+                if let Some(parent_id) = &c.parent_id {
+                    map.insert("parent_id".to_string(), parent_id.clone());
+                }
+                map.insert(
+                    "duration_ms".to_string(),
+                    c.end_time
+                        .map(|end| end.duration_since(c.start_time).as_millis().to_string())
+                        .unwrap_or_else(|| "N/A".to_string()),
+                );
+                map
+            })
+            .collect()
+    }
+
+    fn count(&self) -> usize {
+        self.tracker.get_components().len()
+    }
+}
+
+/// Python context manager for automatic context cleanup.
+#[cfg(feature = "python")]
+#[pyclass]
+pub struct ContextManager {
+    key: String,
+    logger: RustLogger,
+}
+
+/// Python context manager for profiling operations.
 #[cfg(feature = "python")]
 #[pyclass]
 pub struct ProfileContext {
     guard: Option<crate::ProfileGuard>,
 }
 
+/// Python context manager for component tracking.
 #[cfg(feature = "python")]
 #[pyclass]
 pub struct ComponentContext {
     guard: Option<crate::component::ComponentGuard>,
 }
 
+/// Python-exposed visualization configuration.
 #[cfg(feature = "python")]
 #[pyclass]
 pub struct VisualizationConfig {
@@ -203,7 +403,6 @@ impl VisualizationConfig {
         Ok(())
     }
 
-    // Theme support will be added in future versions
     fn set_timing(&mut self, show_timing: bool) {
         self.inner.show_timing = show_timing;
     }
@@ -214,6 +413,24 @@ impl VisualizationConfig {
 
     fn set_metadata(&mut self, show_metadata: bool) {
         self.inner.show_metadata = show_metadata;
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl ContextManager {
+    fn __enter__(&mut self) -> PyResult<()> {
+        Ok(())
+    }
+
+    fn __exit__(
+        &mut self,
+        _exc_type: Option<Py<PyAny>>,
+        _exc_value: Option<Py<PyAny>>,
+        _traceback: Option<Py<PyAny>>,
+    ) -> PyResult<bool> {
+        self.logger.remove_context(&self.key);
+        Ok(false)
     }
 }
 
@@ -230,7 +447,6 @@ impl ProfileContext {
         _exc_value: Option<Py<PyAny>>,
         _traceback: Option<Py<PyAny>>,
     ) -> PyResult<bool> {
-        // Drop the guard to trigger profiling log
         self.guard.take();
         Ok(false)
     }
@@ -249,25 +465,29 @@ impl ComponentContext {
         _exc_value: Option<Py<PyAny>>,
         _traceback: Option<Py<PyAny>>,
     ) -> PyResult<bool> {
-        // Drop the guard to end component tracking
         self.guard.take();
         Ok(false)
     }
 }
 
+/// Creates a new logger instance (convenience function for Python).
 #[cfg(feature = "python")]
 #[pyfunction]
 fn create_logger(name: &str) -> PyResult<Logger> {
     Ok(Logger::new(name))
 }
 
+/// Python module definition for telelog.
 #[cfg(feature = "python")]
 #[pymodule]
 #[pyo3(name = "telelog")]
 fn telelog_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Logger>()?;
+    m.add_class::<Config>()?;
+    m.add_class::<ContextManager>()?;
     m.add_class::<ProfileContext>()?;
     m.add_class::<ComponentContext>()?;
+    m.add_class::<ComponentTrackerWrapper>()?;
     m.add_class::<VisualizationConfig>()?;
     m.add("__version__", crate::VERSION)?;
     m.add_function(wrap_pyfunction!(create_logger, m)?)?;
@@ -275,6 +495,6 @@ fn telelog_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-// For non-Python builds, provide empty module
+/// Stub logger type when Python feature is disabled.
 #[cfg(not(feature = "python"))]
 pub struct Logger;
