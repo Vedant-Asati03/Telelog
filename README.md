@@ -11,8 +11,9 @@ Telelog is a Rust-first logging library that combines structured logging, perfor
 - **Visualization** - Generate Mermaid flowcharts, timelines, and Gantt charts
 - **Context Management** - Add persistent context to all log messages
 - **Rich Console Output** - Clean, colored output for development
-- **Python Bindings** - Use from Python with native Rust performance
-- **Minimal Overhead** - Efficient logging with optional system monitoring
+- **Python Bindings** - Use from Python with Rust-backed performance
+- **High Performance** - Thread-local buffer pooling reduces allocations (~788ns per log)
+- **Async Support** - Bounded async channels with backpressure (requires `async` feature)
 
 ## Example Visualizations
 
