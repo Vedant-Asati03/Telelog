@@ -1,4 +1,21 @@
-//! Output destination management
+//! Output destination management for log messages.
+//!
+//! Provides various output destinations including console, file, rotating files,
+//! and multi-output routing. All destinations implement the [`OutputDestination`] trait.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use telelog::output::{ConsoleOutput, FileOutput, MultiOutput};
+//! use std::sync::Arc;
+//!
+//! let console = Box::new(ConsoleOutput::new(true));
+//! let file = Box::new(FileOutput::new("app.log", false).unwrap());
+//!
+//! let multi = MultiOutput::new()
+//!     .add_output(console)
+//!     .add_output(file);
+//! ```
 
 use crate::level::LogLevel;
 use parking_lot::Mutex;
@@ -9,18 +26,28 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Trait for output destinations
+/// Trait for log message output destinations.
+///
+/// Implement this trait to create custom output destinations.
 pub trait OutputDestination: Send + Sync {
+    /// Writes a log message with the given level and structured data.
     fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()>;
+
+    /// Flushes any buffered output to ensure data is written.
     fn flush(&self) -> io::Result<()>;
 }
 
-/// Console output destination
+/// Console output destination with optional colored output.
 pub struct ConsoleOutput {
     colored: bool,
 }
 
 impl ConsoleOutput {
+    /// Creates a new console output.
+    ///
+    /// # Arguments
+    ///
+    /// * `colored` - Enable ANSI color codes for log levels (requires `console` feature)
     pub fn new(colored: bool) -> Self {
         Self { colored }
     }
@@ -60,7 +87,7 @@ impl OutputDestination for ConsoleOutput {
     }
 }
 
-/// File output destination with buffering
+/// File output destination with optional JSON formatting.
 pub struct FileOutput {
     writer: Arc<Mutex<BufWriter<File>>>,
     path: PathBuf,
@@ -68,10 +95,19 @@ pub struct FileOutput {
 }
 
 impl FileOutput {
+    /// Creates a new file output destination.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - File path for log output
+    /// * `json_format` - If true, writes JSON; otherwise plain text
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or opened.
     pub fn new<P: AsRef<Path>>(path: P, json_format: bool) -> io::Result<Self> {
         let path = path.as_ref().to_path_buf();
 
-        // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -87,6 +123,7 @@ impl FileOutput {
         })
     }
 
+    /// Returns the path to the log file.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -117,7 +154,7 @@ impl OutputDestination for FileOutput {
     }
 }
 
-/// Rotating file output destination
+/// Rotating file output that creates new files when size limit is reached.
 pub struct RotatingFileOutput {
     base_path: PathBuf,
     max_size: u64,
@@ -128,6 +165,17 @@ pub struct RotatingFileOutput {
 }
 
 impl RotatingFileOutput {
+    /// Creates a new rotating file output.
+    ///
+    /// Files are rotated when they exceed `max_size` bytes. Old files are numbered
+    /// (e.g., `app.log.1`, `app.log.2`) and the oldest is deleted when `max_files` is reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_path` - Base path for log files
+    /// * `max_size` - Maximum file size in bytes before rotation
+    /// * `max_files` - Maximum number of rotated files to keep
+    /// * `json_format` - If true, writes JSON; otherwise plain text
     pub fn new<P: AsRef<Path>>(
         base_path: P,
         max_size: u64,
@@ -136,7 +184,6 @@ impl RotatingFileOutput {
     ) -> io::Result<Self> {
         let base_path = base_path.as_ref().to_path_buf();
 
-        // Create parent directories if they don't exist
         if let Some(parent) = base_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -163,7 +210,6 @@ impl RotatingFileOutput {
     }
 
     fn rotate_files(&self) -> io::Result<()> {
-        // Close current file
         {
             let mut current = self.current_file.lock();
             if let Some(mut writer) = current.take() {
@@ -171,7 +217,6 @@ impl RotatingFileOutput {
             }
         }
 
-        // Rotate existing files
         for i in (1..self.max_files).rev() {
             let old_path = self.get_rotated_path(i);
             let new_path = self.get_rotated_path(i + 1);
@@ -184,7 +229,6 @@ impl RotatingFileOutput {
             }
         }
 
-        // Move current file to .1
         if self.base_path.exists() {
             let rotated_path = self.get_rotated_path(1);
             std::fs::rename(&self.base_path, &rotated_path)?;
@@ -207,6 +251,7 @@ impl RotatingFileOutput {
         path
     }
 
+    /// Ensures the current file handle is open and ready for writing.
     fn ensure_file(&self) -> io::Result<()> {
         let mut current = self.current_file.lock();
 
@@ -262,18 +307,23 @@ impl OutputDestination for RotatingFileOutput {
     }
 }
 
-/// Multi-output destination that writes to multiple outputs
+/// Multi-output router that writes to multiple destinations.
+///
+/// Errors from individual outputs are logged to stderr but don't prevent
+/// writing to other outputs.
 pub struct MultiOutput {
     outputs: Vec<Box<dyn OutputDestination>>,
 }
 
 impl MultiOutput {
+    /// Creates an empty multi-output router.
     pub fn new() -> Self {
         Self {
             outputs: Vec::new(),
         }
     }
 
+    /// Adds an output destination to the router.
     pub fn add_output(mut self, output: Box<dyn OutputDestination>) -> Self {
         self.outputs.push(output);
         self
@@ -283,7 +333,6 @@ impl MultiOutput {
 impl OutputDestination for MultiOutput {
     fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
         for output in &self.outputs {
-            // Continue writing to other outputs even if one fails
             if let Err(e) = output.write(level, data) {
                 eprintln!("Output error: {}", e);
             }
@@ -307,7 +356,7 @@ impl Default for MultiOutput {
     }
 }
 
-/// Simple log message for buffering
+/// A log message with level and structured data.
 #[derive(Debug, Clone)]
 pub struct LogMessage {
     pub level: LogLevel,
@@ -315,12 +364,16 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
+    /// Creates a new log message.
     pub fn new(level: LogLevel, data: HashMap<String, Value>) -> Self {
         Self { level, data }
     }
 }
 
-/// Buffered output that collects messages in memory before flushing
+/// Buffered output that accumulates messages before writing.
+///
+/// Automatically flushes when the buffer reaches its capacity or when
+/// explicitly flushed.
 pub struct BufferedOutput {
     destination: Arc<dyn OutputDestination>,
     buffer: Arc<Mutex<Vec<LogMessage>>>,
@@ -328,6 +381,12 @@ pub struct BufferedOutput {
 }
 
 impl BufferedOutput {
+    /// Creates a new buffered output wrapping the given destination.
+    ///
+    /// # Arguments
+    ///
+    /// * `destination` - The underlying output destination
+    /// * `buffer_size` - Number of messages to buffer before auto-flush
     pub fn new(destination: Arc<dyn OutputDestination>, buffer_size: usize) -> Self {
         Self {
             destination,
@@ -336,6 +395,7 @@ impl BufferedOutput {
         }
     }
 
+    /// Flushes all buffered messages to the underlying destination.
     pub fn flush_buffer(&self) -> io::Result<()> {
         let mut buffer = self.buffer.lock();
 
@@ -347,6 +407,7 @@ impl BufferedOutput {
         Ok(())
     }
 
+    /// Returns the number of messages currently in the buffer.
     pub fn buffer_len(&self) -> usize {
         self.buffer.lock().len()
     }
@@ -359,7 +420,6 @@ impl OutputDestination for BufferedOutput {
 
         buffer.push(message);
 
-        // Auto-flush when buffer is full
         if buffer.len() >= self.buffer_size {
             drop(buffer); // Release lock before recursive call
             self.flush_buffer()?;
@@ -375,7 +435,6 @@ impl OutputDestination for BufferedOutput {
 
 impl Drop for BufferedOutput {
     fn drop(&mut self) {
-        // Ensure buffer is flushed when dropped
         if let Err(e) = self.flush_buffer() {
             eprintln!("Error flushing buffer on drop: {}", e);
         }
