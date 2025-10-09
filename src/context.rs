@@ -1,59 +1,81 @@
-//! Context management for structured logging
+//! Context management for structured logging with automatic cleanup.
+//!
+//! Contexts provide a way to add key-value pairs that are automatically included
+//! in all log messages. Use [`ContextGuard`] for automatic cleanup when scope ends.
+//!
+//! # Examples
+//!
+//! ```
+//! use telelog::Logger;
+//!
+//! let logger = Logger::new("app");
+//!
+//! // Manual context management
+//! logger.add_context("user_id", "12345");
+//! logger.info("Processing request");  // includes user_id
+//! logger.clear_context();
+//!
+//! // Automatic cleanup with guard
+//! {
+//!     let _guard = logger.with_context("request_id", "abc");
+//!     logger.info("Inside request");  // includes request_id
+//! } // request_id automatically removed
+//! ```
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Context for adding structured data to log messages
+/// A collection of key-value pairs that are included in log messages.
 #[derive(Debug, Clone)]
 pub struct Context {
     data: HashMap<String, String>,
 }
 
 impl Context {
-    /// Create a new empty context
+    /// Creates an empty context.
     pub fn new() -> Self {
         Self {
             data: HashMap::new(),
         }
     }
 
-    /// Add a key-value pair to the context
+    /// Adds a key-value pair to the context.
     pub fn add(&mut self, key: &str, value: &str) {
         self.data.insert(key.to_string(), value.to_string());
     }
 
-    /// Remove a key from the context
+    /// Removes a key from the context.
     pub fn remove(&mut self, key: &str) {
         self.data.remove(key);
     }
 
-    /// Clear all context data
+    /// Removes all key-value pairs from the context.
     pub fn clear(&mut self) {
         self.data.clear();
     }
 
-    /// Get a value from the context
+    /// Gets a value from the context by key.
     pub fn get(&self, key: &str) -> Option<&String> {
         self.data.get(key)
     }
 
-    /// Check if the context contains a key
+    /// Returns `true` if the context contains the given key.
     pub fn contains_key(&self, key: &str) -> bool {
         self.data.contains_key(key)
     }
 
-    /// Iterate over all key-value pairs
+    /// Returns an iterator over the key-value pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.data.iter()
     }
 
-    /// Get the number of context entries
+    /// Returns the number of key-value pairs in the context.
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
-    /// Check if the context is empty
+    /// Returns `true` if the context is empty.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -65,14 +87,17 @@ impl Default for Context {
     }
 }
 
-/// A guard that automatically removes context when dropped
+/// RAII guard that automatically removes a context key when dropped.
+///
+/// This guard ensures that temporary context is cleaned up when it goes out of scope,
+/// preventing context pollution across different operations.
 pub struct ContextGuard {
     key: String,
     context: Arc<RwLock<Context>>,
 }
 
 impl ContextGuard {
-    /// Create a new context guard
+    /// Creates a new context guard for the specified key.
     pub fn new(key: String, context: Arc<RwLock<Context>>) -> Self {
         Self { key, context }
     }
