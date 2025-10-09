@@ -6,6 +6,7 @@
 //! - Cross-language bindings support
 //! - System resource monitoring
 //! - Context management and decorators
+//! - Thread-local buffer pooling for reduced allocations
 //!
 //! ## Quick Start
 //!
@@ -26,20 +27,37 @@
 //! // Your expensive operation here
 //! ```
 //!
+//! ## Async Support
+//!
+//! Enable the `async` feature for bounded async output with backpressure:
+//!
+//! ```rust,ignore
+//! use telelog::{Logger, AsyncOutput};
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let logger = Logger::new("app");
+//!     let mut async_output = AsyncOutput::new();
+//!     logger.add_output(Box::new(async_output));
+//!     logger.info("Async logging!");
+//! }
+//! ```
+//!
+//! ## Performance
+//!
+//! - **~788ns** per log with thread-local buffer pooling
+//! - **~11ns** level check overhead (nearly free when filtered)
+//! - **Bounded async** channels with backpressure (capacity: 1000)
+//!
 //! ## Features
 //!
-//! - **Zero-allocation logging** in hot paths
-//! - **Structured logging** with JSON output
-//! - **Performance profiling** with minimal overhead
-//! - **Rich console output** with colors and formatting
-//! - **System monitoring** integration
-//! - **Thread-safe** and **async-ready**
+//! - **Thread-safe** logging with parking_lot
+//! - **Optimized allocations** with thread-local buffer pooling
+//! - **Optional features**: async, system-monitor, console, python
 
 pub mod component;
 pub mod config;
-pub mod console;
 pub mod context;
-pub mod format;
 pub mod level;
 pub mod logger;
 pub mod output;
@@ -52,7 +70,6 @@ pub mod async_output;
 #[cfg(feature = "system-monitor")]
 pub mod monitor;
 
-// Re-export main types
 pub use component::{
     Component, ComponentGuard, ComponentMetadata, ComponentStatus, ComponentTracker,
 };
@@ -70,16 +87,13 @@ pub use async_output::AsyncOutput;
 #[cfg(feature = "system-monitor")]
 pub use monitor::SystemMonitor;
 
-// Language bindings
 #[cfg(feature = "python")]
 pub mod python;
 
-/// Current version of the telelog library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Initialize telelog with default configuration
+/// Initialize telelog with default configuration.
 ///
-/// This is a convenience function that sets up a logger with sensible defaults.
 /// For more control, use `Logger::new()` directly.
 ///
 /// # Example
