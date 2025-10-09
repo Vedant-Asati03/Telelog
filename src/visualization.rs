@@ -1,4 +1,24 @@
-//! Mermaid visualization for component tracking
+//! Mermaid diagram generation for component visualization.
+//!
+//! Provides utilities to generate Mermaid diagrams from tracked components,
+//! supporting flowcharts, timelines, and Gantt charts with customizable styling.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use telelog::{MermaidGenerator, ChartConfig, ChartType};
+//! use telelog::ComponentTracker;
+//!
+//! let tracker = ComponentTracker::new();
+//! // ... track components ...
+//!
+//! let config = ChartConfig::new()
+//!     .with_chart_type(ChartType::Flowchart)
+//!     .with_timing(true);
+//!
+//! let generator = MermaidGenerator::new(config);
+//! let diagram = generator.generate_diagram(&tracker).unwrap();
+//! ```
 
 use crate::component::{Component, ComponentStatus, ComponentTracker};
 use serde::{Deserialize, Serialize};
@@ -7,40 +27,33 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
-/// Chart configuration for Mermaid visualization
+/// Configuration for chart generation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartConfig {
-    /// Chart type (flowchart, timeline, etc.)
     pub chart_type: ChartType,
-    /// Direction for flowcharts
     pub direction: Direction,
-    /// Include timing information
     pub show_timing: bool,
-    /// Include memory information
     pub show_memory: bool,
-    /// Include metadata in nodes
     pub show_metadata: bool,
 }
 
+/// Supported chart types for visualization.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ChartType {
-    /// Flowchart showing component dependencies
+    /// Hierarchical flowchart showing component relationships
     Flowchart,
-    /// Timeline showing component execution order
+    /// Timeline showing execution order
     Timeline,
-    /// Gantt chart showing component durations
+    /// Gantt chart showing parallel execution
     Gantt,
 }
 
+/// Diagram flow direction.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Direction {
-    /// Top to bottom
     TopDown,
-    /// Bottom to top
     BottomUp,
-    /// Left to right
     LeftRight,
-    /// Right to left
     RightLeft,
 }
 
@@ -57,30 +70,36 @@ impl Default for ChartConfig {
 }
 
 impl ChartConfig {
+    /// Creates a new chart configuration with defaults.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the chart type.
     pub fn with_chart_type(mut self, chart_type: ChartType) -> Self {
         self.chart_type = chart_type;
         self
     }
 
+    /// Sets the diagram flow direction.
     pub fn with_direction(mut self, direction: Direction) -> Self {
         self.direction = direction;
         self
     }
 
+    /// Enables or disables timing information in diagrams.
     pub fn with_timing(mut self, show_timing: bool) -> Self {
         self.show_timing = show_timing;
         self
     }
 
+    /// Enables or disables memory usage information in diagrams.
     pub fn with_memory(mut self, show_memory: bool) -> Self {
         self.show_memory = show_memory;
         self
     }
 
+    /// Enables or disables custom metadata in diagrams.
     pub fn with_metadata(mut self, show_metadata: bool) -> Self {
         self.show_metadata = show_metadata;
         self
@@ -98,17 +117,22 @@ impl Direction {
     }
 }
 
-/// Mermaid visualization generator
+/// Mermaid diagram generator for component visualization.
 pub struct MermaidGenerator {
     config: ChartConfig,
 }
 
 impl MermaidGenerator {
+    /// Creates a new Mermaid generator with the given configuration.
     pub fn new(config: ChartConfig) -> Self {
         Self { config }
     }
 
-    /// Generate Mermaid diagram from component tracker
+    /// Generates a Mermaid diagram from the tracked components.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if diagram generation fails.
     pub fn generate_diagram(&self, tracker: &ComponentTracker) -> Result<String, String> {
         let components = tracker.get_components();
 
@@ -119,18 +143,15 @@ impl MermaidGenerator {
         }
     }
 
-    /// Generate flowchart diagram
     fn generate_flowchart(
         &self,
         components: &HashMap<String, Component>,
     ) -> Result<String, String> {
         let mut diagram = String::new();
 
-        // Chart declaration with direction
         writeln!(diagram, "flowchart {}", self.config.direction.to_mermaid())
             .map_err(|e| format!("Failed to write diagram: {}", e))?;
 
-        // Add nodes
         for (id, component) in components {
             let node_id = self.sanitize_id(id);
             let node_label = self.format_node_label(component);
@@ -145,7 +166,6 @@ impl MermaidGenerator {
             }
         }
 
-        // Add edges (parent-child relationships)
         for (id, component) in components {
             for child_id in &component.children {
                 writeln!(
@@ -158,7 +178,6 @@ impl MermaidGenerator {
             }
         }
 
-        // Add CSS classes for styling
         writeln!(
             diagram,
             "\n    classDef success fill:#d4edda,stroke:#28a745"
@@ -177,7 +196,6 @@ impl MermaidGenerator {
         Ok(diagram)
     }
 
-    /// Generate timeline diagram
     fn generate_timeline(&self, components: &HashMap<String, Component>) -> Result<String, String> {
         let mut diagram = String::new();
 
@@ -185,11 +203,9 @@ impl MermaidGenerator {
         writeln!(diagram, "    title Component Execution Timeline")
             .map_err(|e| format!("Failed to write title: {}", e))?;
 
-        // Sort components by start time (newest first for timeline)
         let mut sorted_components: Vec<_> = components.values().collect();
         sorted_components.sort_by_key(|c| std::cmp::Reverse(c.start_time));
 
-        // Group components by sections for timeline
         for component in sorted_components {
             let label = if self.config.show_timing {
                 if let Some(duration) = component.duration() {
@@ -212,7 +228,6 @@ impl MermaidGenerator {
         Ok(diagram)
     }
 
-    /// Generate Gantt chart
     fn generate_gantt(&self, components: &HashMap<String, Component>) -> Result<String, String> {
         let mut diagram = String::new();
 
@@ -224,7 +239,6 @@ impl MermaidGenerator {
         writeln!(diagram, "    axisFormat %L")
             .map_err(|e| format!("Failed to write axisFormat: {}", e))?;
 
-        // Find earliest start time as baseline
         let baseline = components
             .values()
             .map(|c| c.start_time)
@@ -263,7 +277,6 @@ impl MermaidGenerator {
         Ok(diagram)
     }
 
-    /// Format node label with optional timing and metadata
     fn format_node_label(&self, component: &Component) -> String {
         let mut parts = vec![component.name.clone()];
 
@@ -287,11 +300,9 @@ impl MermaidGenerator {
             }
         }
 
-        // Join with <br/> tags for HTML-style line breaks in Mermaid
         format!("[\"{}\"]", parts.join("<br/>"))
     }
 
-    /// Get CSS class for component status
     fn get_node_style(&self, status: &ComponentStatus) -> &'static str {
         match status {
             ComponentStatus::Success => "success",
@@ -301,9 +312,7 @@ impl MermaidGenerator {
         }
     }
 
-    /// Sanitize ID for use in Mermaid
     fn sanitize_id(&self, id: &str) -> String {
-        // Replace invalid characters and ensure ID doesn't start with number
         let cleaned = id.replace(['-', ' ', '.'], "_");
         if cleaned.chars().next().map_or(false, |c| c.is_ascii_digit()) {
             format!("node_{}", cleaned)
@@ -312,7 +321,11 @@ impl MermaidGenerator {
         }
     }
 
-    /// Generate diagram and save to .mmd file
+    /// Saves the generated diagram to a `.mmd` file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file writing fails.
     pub fn save_mmd(&self, tracker: &ComponentTracker, output_path: &Path) -> Result<(), String> {
         let diagram = self.generate_diagram(tracker)?;
         let mmd_path = output_path.with_extension("mmd");
