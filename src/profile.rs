@@ -1,9 +1,30 @@
-//! Performance profiling utilities
+//! Performance profiling utilities with automatic timing.
+//!
+//! Provides RAII guards and profiler utilities for measuring operation duration
+//! and automatically logging performance metrics.
+//!
+//! # Examples
+//!
+//! ```
+//! use telelog::Logger;
+//!
+//! let logger = Logger::new("app");
+//! {
+//!     let _guard = logger.profile("database_query");
+//!     // Operation is timed automatically
+//! } // Duration logged when guard drops
+//! ```
 
 use crate::{level::LogLevel, logger::Logger};
 use std::time::Instant;
 
-/// A guard that automatically logs performance metrics when dropped
+/// RAII guard that profiles an operation and logs its duration.
+///
+/// The duration is automatically logged when the guard is dropped, with
+/// the log level determined by execution time:
+/// - < 100ms: Debug level
+/// - 100-1000ms: Info level  
+/// - > 1000ms: Warning level (slow operation)
 pub struct ProfileGuard {
     operation: String,
     start_time: Instant,
@@ -11,11 +32,10 @@ pub struct ProfileGuard {
 }
 
 impl ProfileGuard {
-    /// Create a new profile guard
+    /// Creates a new profiling guard for the specified operation.
     pub fn new(operation: &str, logger: Logger) -> Self {
         let start_time = Instant::now();
 
-        // Log start of operation
         logger.debug(&format!("Started operation: {}", operation));
 
         Self {
@@ -25,12 +45,12 @@ impl ProfileGuard {
         }
     }
 
-    /// Get the elapsed time since the guard was created
+    /// Returns the elapsed time since the guard was created.
     pub fn elapsed(&self) -> std::time::Duration {
         self.start_time.elapsed()
     }
 
-    /// Get the operation name
+    /// Returns the operation name being profiled.
     pub fn operation(&self) -> &str {
         &self.operation
     }
@@ -41,7 +61,6 @@ impl Drop for ProfileGuard {
         let elapsed = self.start_time.elapsed();
         let elapsed_ms = elapsed.as_millis();
 
-        // Determine log level based on duration
         let (level, message) = if elapsed_ms > 1000 {
             (
                 LogLevel::Warning,
@@ -65,7 +84,6 @@ impl Drop for ProfileGuard {
             )
         };
 
-        // Log with structured data
         match level {
             LogLevel::Debug => self.logger.debug_with(
                 &message,
@@ -96,33 +114,36 @@ impl Drop for ProfileGuard {
     }
 }
 
-/// A profiler that can measure multiple operations
+/// Manual profiler for tracking multiple operations.
+///
+/// Unlike [`ProfileGuard`], this requires explicit start/end calls and
+/// doesn't automatically log results.
 pub struct Profiler {
     operations: Vec<(String, Instant)>,
 }
 
 impl Profiler {
-    /// Create a new profiler
+    /// Creates a new empty profiler.
     pub fn new() -> Self {
         Self {
             operations: Vec::new(),
         }
     }
 
-    /// Start timing an operation
+    /// Starts timing an operation.
     pub fn start(&mut self, operation: &str) {
         self.operations
             .push((operation.to_string(), Instant::now()));
     }
 
-    /// End timing the most recent operation and return the duration
+    /// Ends the most recent operation and returns its name and duration.
     pub fn end(&mut self) -> Option<(String, std::time::Duration)> {
         self.operations
             .pop()
             .map(|(op, start)| (op, start.elapsed()))
     }
 
-    /// Get timing for a specific operation (if it's currently being timed)
+    /// Gets the elapsed time for a specific operation (most recent if multiple).
     pub fn get_timing(&self, operation: &str) -> Option<std::time::Duration> {
         self.operations
             .iter()
@@ -131,12 +152,12 @@ impl Profiler {
             .map(|(_, start)| start.elapsed())
     }
 
-    /// Clear all operations
+    /// Clears all tracked operations.
     pub fn clear(&mut self) {
         self.operations.clear();
     }
 
-    /// Get the number of active operations
+    /// Returns the number of active (un-ended) operations.
     pub fn active_count(&self) -> usize {
         self.operations.len()
     }
