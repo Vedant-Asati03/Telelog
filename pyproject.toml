@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "telelog-python"
-version = "0.1.0"
+version = "0.2.0"
 description = "High-performance structured logging library with rich visualization capabilities"
 authors = [{ name = "Vedant Asati", email = "vedant.asati03@gmail.com" }]
 license = { text = "MIT OR Apache-2.0" }
