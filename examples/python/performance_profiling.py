@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Performance Profiling Example
-Demonstrates timing operations and performance measurement.
-"""
+"""Tracking code execution time with performance profiling."""
+
 import time
 import telelog as tl
 
@@ -11,21 +9,19 @@ def main():
     
     logger.info("Starting performance demo")
     
-    # Simple profiling with context manager
     with logger.profile("database_query"):
-        time.sleep(0.1)  # Simulate database work
+        time.sleep(0.1)
         logger.info("Query executed")
     
-    # Nested profiling
     with logger.profile("request_processing"):
         logger.info("Processing request")
         
         with logger.profile("validation"):
-            time.sleep(0.05)  # Simulate validation
+            time.sleep(0.05)
             logger.info("Input validated")
         
         with logger.profile("business_logic"):
-            time.sleep(0.08)  # Simulate processing
+            time.sleep(0.08)
             logger.info("Business logic executed")
         
         logger.info("Request completed")

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-Component Tracking Example
-Demonstrates tracking architectural components and their relationships.
-"""
+"""Tracking different components of your application."""
+
 import time
 import telelog as tl
 
@@ -11,23 +9,19 @@ def main():
     
     logger.info("Starting component tracking demo")
     
-    # Track web server component
     with logger.track_component("web_server"):
         logger.info("Web server handling request")
         
-        # Track authentication service
         with logger.track_component("auth_service"):
-            time.sleep(0.05)  # Simulate auth work
+            time.sleep(0.05)
             logger.info("User authenticated")
         
-        # Track database layer
         with logger.track_component("database"):
-            time.sleep(0.08)  # Simulate DB work
+            time.sleep(0.08)
             logger.info("Data retrieved")
         
-        # Track response generation
         with logger.track_component("response_builder"):
-            time.sleep(0.03)  # Simulate response building
+            time.sleep(0.03)
             logger.info("Response generated")
         
         logger.info("Request completed")

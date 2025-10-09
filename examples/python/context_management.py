@@ -1,32 +1,30 @@
 #!/usr/bin/env python3
-"""
-Context Management Example
-Demonstrates adding, managing, and clearing logging contexts.
-"""
+"""Managing persistent context that applies to multiple log entries."""
+
 import telelog as tl
 
 def main():
     logger = tl.Logger("context_demo")
     
-    # Basic logging without context
     logger.info("Starting application")
     
-    # Add request context
     logger.add_context("request_id", "req_123")
     logger.add_context("user_id", "user_456")
-    logger.info("Processing request")  # Will include context
+    logger.info("Processing request")
     
-    # Add more context
     logger.add_context("session_id", "sess_789")
-    logger.info("User authenticated")  # Will include all context
+    logger.info("User authenticated")
     
-    # Remove specific context
     logger.remove_context("session_id")
-    logger.info("Session context removed")  # session_id gone
+    logger.info("Session context removed")
     
-    # Clear all context
     logger.clear_context()
-    logger.info("All context cleared")  # No context
+    logger.info("All context cleared")
+    
+    with logger.with_context("temp_id", "tmp_999"):
+        logger.info("Inside scoped context")
+    
+    logger.info("Outside scoped context")
     
     print("✅ Context management example finished")
 

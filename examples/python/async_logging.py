@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""
-Async Logging Example
-Demonstrates logging in async/await environments.
-"""
+"""Thread-safe logging in async environments."""
+
 import asyncio
 import telelog as tl
 
 async def async_task(logger, task_name, duration):
-    """Simulate an async task with logging"""
     with logger.profile(f"async_{task_name}"):
         logger.info(f"Starting {task_name}")
         await asyncio.sleep(duration)
@@ -18,10 +15,6 @@ async def main():
     
     logger.info("Starting async logging demo")
     
-    # Add context for the async session
-    logger.add_context("session_id", "async_123")
-    
-    # Run concurrent async tasks
     tasks = [
         async_task(logger, "database_fetch", 0.1),
         async_task(logger, "api_call", 0.08),
