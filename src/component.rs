@@ -1,4 +1,21 @@
-//! Component tracking for visualization
+//! Component tracking for hierarchical visualization and performance analysis.
+//!
+//! This module provides utilities for tracking component execution, including:
+//! - Hierarchical parent-child relationships
+//! - Automatic timing and status tracking
+//! - RAII guards for automatic lifecycle management
+//! - Optional system resource monitoring
+//!
+//! # Examples
+//!
+//! ```
+//! use telelog::ComponentTracker;
+//! use std::sync::Arc;
+//!
+//! let tracker = Arc::new(ComponentTracker::new());
+//! let _guard = telelog::ComponentGuard::new("operation", tracker);
+//! // Component is automatically tracked and completed when guard drops
+//! ```
 
 use crate::level::LogLevel;
 use parking_lot::RwLock;
@@ -10,33 +27,32 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "system-monitor")]
 use crate::monitor::SystemMonitor;
 
-/// Status of a component execution
+/// Status of a tracked component.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ComponentStatus {
-    /// Component is currently running
+    /// Component is currently executing
     Running,
     /// Component completed successfully
     Success,
-    /// Component failed with error
+    /// Component failed with an error message
     Failed(String),
-    /// Component was cancelled/interrupted
+    /// Component was cancelled before completion
     Cancelled,
 }
 
-/// Metadata for a component
+/// Metadata associated with a tracked component.
+///
+/// Includes custom key-value pairs, memory usage, messages, and log levels.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentMetadata {
-    /// Custom key-value metadata
     pub custom: HashMap<String, String>,
-    /// Memory usage in bytes (if available)
     pub memory_bytes: Option<u64>,
-    /// Log message associated with this component
     pub message: Option<String>,
-    /// Log level of the component
     pub level: LogLevel,
 }
 
 impl ComponentMetadata {
+    /// Creates an empty metadata instance.
     pub fn new() -> Self {
         Self {
             custom: HashMap::new(),
@@ -46,21 +62,25 @@ impl ComponentMetadata {
         }
     }
 
+    /// Adds a custom key-value pair to the metadata.
     pub fn with_custom(mut self, key: &str, value: &str) -> Self {
         self.custom.insert(key.to_string(), value.to_string());
         self
     }
 
+    /// Sets the memory usage in bytes.
     pub fn with_memory(mut self, bytes: u64) -> Self {
         self.memory_bytes = Some(bytes);
         self
     }
 
+    /// Sets a message associated with the component.
     pub fn with_message(mut self, message: &str) -> Self {
         self.message = Some(message.to_string());
         self
     }
 
+    /// Sets the log level for the component.
     pub fn with_level(mut self, level: LogLevel) -> Self {
         self.level = level;
         self
@@ -73,47 +93,39 @@ impl Default for ComponentMetadata {
     }
 }
 
-/// A tracked component with timing and metadata
+/// A tracked component with timing, status, and hierarchical relationships.
+///
+/// Components automatically track their execution time and can be organized
+/// in parent-child hierarchies for visualization.
 #[derive(Debug, Clone)]
 pub struct Component {
-    /// Unique identifier for this component
     pub id: String,
-    /// Human-readable name
     pub name: String,
-    /// Parent component ID (if any)
     pub parent_id: Option<String>,
-    /// Child component IDs
     pub children: Vec<String>,
-    /// When the component started
     pub start_time: Instant,
-    /// When the component ended (if completed)
     pub end_time: Option<Instant>,
-    /// Current status
     pub status: ComponentStatus,
-    /// Additional metadata
     pub metadata: ComponentMetadata,
 }
 
-/// Serializable version of Component for exports
+/// Serializable representation of a component for export.
+///
+/// Unlike [`Component`], this uses duration in milliseconds instead of `Instant`
+/// for portability across serialization boundaries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableComponent {
-    /// Unique identifier for this component
     pub id: String,
-    /// Human-readable name
     pub name: String,
-    /// Parent component ID (if any)
     pub parent_id: Option<String>,
-    /// Child component IDs
     pub children: Vec<String>,
-    /// Duration in milliseconds (if completed)
     pub duration_ms: Option<f64>,
-    /// Current status
     pub status: ComponentStatus,
-    /// Additional metadata
     pub metadata: ComponentMetadata,
 }
 
 impl Component {
+    /// Creates a new component with the given ID, name, and optional parent.
     pub fn new(id: String, name: String, parent_id: Option<String>) -> Self {
         Self {
             id,
@@ -127,23 +139,23 @@ impl Component {
         }
     }
 
-    /// Get the duration of this component (if completed)
+    /// Returns the duration of component execution, if completed.
     pub fn duration(&self) -> Option<Duration> {
         self.end_time.map(|end| end.duration_since(self.start_time))
     }
 
-    /// Mark component as completed with status
+    /// Marks the component as completed with the given status.
     pub fn complete(&mut self, status: ComponentStatus) {
         self.end_time = Some(Instant::now());
         self.status = status;
     }
 
-    /// Check if component is still running
+    /// Returns `true` if the component is currently running.
     pub fn is_running(&self) -> bool {
         matches!(self.status, ComponentStatus::Running)
     }
 
-    /// Convert to serializable version
+    /// Converts this component to a serializable representation.
     pub fn to_serializable(&self) -> SerializableComponent {
         SerializableComponent {
             id: self.id.clone(),
@@ -157,18 +169,19 @@ impl Component {
     }
 }
 
-/// Component tracking system
+/// Thread-safe tracker for managing component hierarchies.
+///
+/// Maintains a stack-based context for automatic parent-child relationships
+/// and provides methods to query component trees.
 #[derive(Debug)]
 pub struct ComponentTracker {
-    /// All tracked components
     components: RwLock<HashMap<String, Component>>,
-    /// Current component stack (for automatic parent-child relationships)
     current_stack: RwLock<Vec<String>>,
-    /// Counter for generating unique IDs
     next_id: RwLock<u64>,
 }
 
 impl ComponentTracker {
+    /// Creates a new empty component tracker.
     pub fn new() -> Self {
         Self {
             components: RwLock::new(HashMap::new()),
@@ -177,7 +190,6 @@ impl ComponentTracker {
         }
     }
 
-    /// Generate a unique component ID
     fn generate_id(&self) -> String {
         let mut next_id = self.next_id.write();
         let id = *next_id;
@@ -185,40 +197,42 @@ impl ComponentTracker {
         format!("comp_{}", id)
     }
 
-    /// Start tracking a new component
+    /// Starts tracking a new component.
+    ///
+    /// The component is automatically added as a child of the current component
+    /// on the stack, if any. Returns the generated component ID.
     pub fn start_component(&self, name: &str) -> String {
         let id = self.generate_id();
         let parent_id = self.current_stack.read().last().cloned();
 
         let component = Component::new(id.clone(), name.to_string(), parent_id.clone());
 
-        // Add to parent's children list
         if let Some(parent_id) = &parent_id {
             if let Some(parent) = self.components.write().get_mut(parent_id) {
                 parent.children.push(id.clone());
             }
         }
 
-        // Add to components map
         self.components.write().insert(id.clone(), component);
 
-        // Push to current stack
         self.current_stack.write().push(id.clone());
 
         id
     }
 
-    /// End tracking a component
+    /// Ends a component and sets its status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no component with the given ID exists.
     pub fn end_component(&self, id: &str, status: ComponentStatus) -> Result<(), String> {
         let mut components = self.components.write();
         let mut stack = self.current_stack.write();
 
-        // Remove from stack
         if let Some(pos) = stack.iter().position(|x| x == id) {
             stack.remove(pos);
         }
 
-        // Update component
         if let Some(component) = components.get_mut(id) {
             component.complete(status);
             Ok(())
@@ -227,7 +241,11 @@ impl ComponentTracker {
         }
     }
 
-    /// Update component metadata
+    /// Updates the metadata for a component.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no component with the given ID exists.
     pub fn update_metadata(&self, id: &str, metadata: ComponentMetadata) -> Result<(), String> {
         let mut components = self.components.write();
         if let Some(component) = components.get_mut(id) {
@@ -238,12 +256,12 @@ impl ComponentTracker {
         }
     }
 
-    /// Get all components
+    /// Returns a copy of all tracked components.
     pub fn get_components(&self) -> HashMap<String, Component> {
         self.components.read().clone()
     }
 
-    /// Get root components (components with no parent)
+    /// Returns all root components (those without a parent).
     pub fn get_root_components(&self) -> Vec<Component> {
         self.components
             .read()
@@ -253,7 +271,7 @@ impl ComponentTracker {
             .collect()
     }
 
-    /// Get children of a specific component
+    /// Returns all child components of the specified parent.
     pub fn get_children(&self, parent_id: &str) -> Vec<Component> {
         let components = self.components.read();
         if let Some(parent) = components.get(parent_id) {
@@ -267,7 +285,7 @@ impl ComponentTracker {
         }
     }
 
-    /// Clear all tracked components
+    /// Clears all tracked components and resets internal state.
     pub fn clear(&self) {
         self.components.write().clear();
         self.current_stack.write().clear();
@@ -281,7 +299,24 @@ impl Default for ComponentTracker {
     }
 }
 
-/// RAII guard for automatic component tracking
+/// RAII guard that automatically tracks and completes a component.
+///
+/// When dropped, the component is marked as successful. Use explicit completion
+/// methods like [`complete_success`](Self::complete_success) or
+/// [`complete_failure`](Self::complete_failure) for specific status.
+///
+/// # Examples
+///
+/// ```
+/// use telelog::{ComponentTracker, ComponentGuard};
+/// use std::sync::Arc;
+///
+/// let tracker = Arc::new(ComponentTracker::new());
+/// {
+///     let guard = ComponentGuard::new("my_operation", tracker.clone());
+///     // Do work...
+/// } // Component automatically marked as Success on drop
+/// ```
 pub struct ComponentGuard {
     id: String,
     tracker: Arc<ComponentTracker>,
@@ -291,6 +326,7 @@ pub struct ComponentGuard {
 }
 
 impl ComponentGuard {
+    /// Creates a new component guard with the given name.
     pub fn new(name: &str, tracker: Arc<ComponentTracker>) -> Self {
         let id = tracker.start_component(name);
         Self {
@@ -302,8 +338,9 @@ impl ComponentGuard {
         }
     }
 
-    /// Create a new component guard with system monitoring
-    #[cfg(feature = "system-monitor")]
+    /// Creates a new component guard with system monitoring enabled.
+    ///
+    /// Tracks memory usage delta from component start to end.
     pub fn new_with_monitor(
         name: &str,
         tracker: Arc<ComponentTracker>,
@@ -311,7 +348,6 @@ impl ComponentGuard {
     ) -> Self {
         let id = tracker.start_component(name);
 
-        // Capture initial memory usage
         let start_memory = {
             let mut monitor_guard = monitor.write();
             monitor_guard.refresh();
@@ -326,30 +362,32 @@ impl ComponentGuard {
         }
     }
 
-    /// Get the component ID
+    /// Returns the component ID.
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    /// Update metadata for this component
+    /// Updates the complete metadata for this component.
     pub fn update_metadata(&self, metadata: ComponentMetadata) -> Result<(), String> {
         self.tracker.update_metadata(&self.id, metadata)
     }
 
-    /// Add custom metadata
+    /// Adds a single key-value pair to the component's metadata.
     pub fn add_metadata(&self, key: &str, value: &str) -> Result<(), String> {
         let components = self.tracker.components.read();
         if let Some(component) = components.get(&self.id) {
             let mut metadata = component.metadata.clone();
             metadata.custom.insert(key.to_string(), value.to_string());
-            drop(components); // Release read lock
+            drop(components);
             self.tracker.update_metadata(&self.id, metadata)
         } else {
             Err(format!("Component with ID '{}' not found", self.id))
         }
     }
 
-    /// Update memory usage from current system state
+    /// Updates memory usage from the current system state.
+    ///
+    /// Calculates memory delta since component creation if available.
     #[cfg(feature = "system-monitor")]
     pub fn update_memory_usage(&self) -> Result<(), String> {
         if let Some(monitor) = &self.system_monitor {
@@ -376,57 +414,53 @@ impl ComponentGuard {
         }
     }
 
-    /// Complete with success status
+    /// Marks the component as successfully completed and prevents drop behavior.
     pub fn complete_success(self) {
         let _ = self
             .tracker
             .end_component(&self.id, ComponentStatus::Success);
-        std::mem::forget(self); // Prevent drop from running
+        std::mem::forget(self);
     }
 
-    /// Complete with failure status
+    /// Marks the component as failed with an error message and prevents drop behavior.
     pub fn complete_failure(self, error: &str) {
         let _ = self
             .tracker
             .end_component(&self.id, ComponentStatus::Failed(error.to_string()));
-        std::mem::forget(self); // Prevent drop from running
+        std::mem::forget(self);
     }
 
-    /// Complete with cancelled status
+    /// Marks the component as cancelled and prevents drop behavior.
     pub fn complete_cancelled(self) {
         let _ = self
             .tracker
             .end_component(&self.id, ComponentStatus::Cancelled);
-        std::mem::forget(self); // Prevent drop from running
+        std::mem::forget(self);
     }
 }
 
 impl Drop for ComponentGuard {
     fn drop(&mut self) {
-        // Capture final memory usage if system monitor is available
         #[cfg(feature = "system-monitor")]
         if let Some(monitor) = &self.system_monitor {
             let mut monitor_guard = monitor.write();
             monitor_guard.refresh();
             if let Some(current_memory) = monitor_guard.process_memory() {
-                // Calculate memory delta if we have start memory
                 let memory_to_store = if let Some(start_mem) = self.start_memory {
                     if current_memory > start_mem {
-                        current_memory - start_mem // Memory allocated by this component
+                        current_memory - start_mem
                     } else {
-                        current_memory // Just store current memory if it decreased
+                        current_memory
                     }
                 } else {
                     current_memory
                 };
 
-                // Update component metadata with memory usage
                 let metadata = ComponentMetadata::new().with_memory(memory_to_store);
                 let _ = self.tracker.update_metadata(&self.id, metadata);
             }
         }
 
-        // Auto-complete with success if not explicitly completed
         let _ = self
             .tracker
             .end_component(&self.id, ComponentStatus::Success);
