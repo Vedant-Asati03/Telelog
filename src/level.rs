@@ -1,25 +1,40 @@
-//! Log level definitions and utilities
+//! Log level definitions and utilities for filtering and formatting.
+//!
+//! Provides the [`LogLevel`] enum for categorizing log messages by severity,
+//! with support for filtering, ordering, and color-coded output.
+//!
+//! # Examples
+//!
+//! ```
+//! use telelog::LogLevel;
+//!
+//! let level = LogLevel::Info;
+//! assert_eq!(level.as_str(), "INFO");
+//! assert!(level.should_log(LogLevel::Debug));
+//! assert!(!LogLevel::Debug.should_log(LogLevel::Info));
+//!
+//! // Parse from string
+//! let level: LogLevel = "warning".parse().unwrap();
+//! assert_eq!(level, LogLevel::Warning);
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Log levels in order of severity
+/// Log severity levels in ascending order of importance.
+///
+/// Levels can be compared and ordered: Debug < Info < Warning < Error < Critical
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LogLevel {
-    /// Detailed information for debugging
     Debug = 0,
-    /// General information about program execution
     Info = 1,
-    /// Warning about potential issues
     Warning = 2,
-    /// Error conditions that should be addressed
     Error = 3,
-    /// Critical errors that may cause program termination
     Critical = 4,
 }
 
 impl LogLevel {
-    /// Convert log level to string
+    /// Returns the string representation of the log level.
     pub fn as_str(&self) -> &'static str {
         match self {
             LogLevel::Debug => "DEBUG",
@@ -30,19 +45,30 @@ impl LogLevel {
         }
     }
 
-    /// Get color code for console output
+    /// Returns the ANSI color code for terminal output (requires `console` feature).
     #[cfg(feature = "console")]
     pub fn color(&self) -> &'static str {
         match self {
-            LogLevel::Debug => "\x1b[36m",    // Cyan
-            LogLevel::Info => "\x1b[32m",     // Green
-            LogLevel::Warning => "\x1b[33m",  // Yellow
-            LogLevel::Error => "\x1b[31m",    // Red
-            LogLevel::Critical => "\x1b[91m", // Bright Red
+            LogLevel::Debug => "\x1b[36m",
+            LogLevel::Info => "\x1b[32m",
+            LogLevel::Warning => "\x1b[33m",
+            LogLevel::Error => "\x1b[31m",
+            LogLevel::Critical => "\x1b[91m",
         }
     }
 
-    /// Check if this level should be logged based on minimum level
+    /// Determines if this log level should be logged given the minimum level.
+    ///
+    /// Returns `true` if this level is equal to or higher than the minimum level.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use telelog::LogLevel;
+    ///
+    /// assert!(LogLevel::Error.should_log(LogLevel::Info));
+    /// assert!(!LogLevel::Debug.should_log(LogLevel::Info));
+    /// ```
     pub fn should_log(&self, min_level: LogLevel) -> bool {
         *self >= min_level
     }
