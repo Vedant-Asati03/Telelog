@@ -1,26 +1,38 @@
-//! Configuration management for telelog
+//! Configuration management for telelog with preset configurations.
+//!
+//! Provides a flexible configuration system with builder pattern and presets
+//! for common use cases (development, production, performance analysis).
+//!
+//! # Examples
+//!
+//! ```
+//! use telelog::Config;
+//!
+//! // Custom configuration
+//! let config = Config::new()
+//!     .with_min_level(telelog::LogLevel::Debug)
+//!     .with_console_output(true)
+//!     .with_file_output("app.log");
+//!
+//! // Or use presets
+//! let dev_config = Config::development();
+//! let prod_config = Config::production("logs/app.log");
+//! ```
 
 use crate::level::LogLevel;
 use crate::visualization::{ChartConfig, ChartType};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Output configuration settings
+/// Output-related configuration options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputConfig {
-    /// Enable console output
     pub console_enabled: bool,
-    /// Enable colored console output
     pub colored_output: bool,
-    /// Enable file output
     pub file_enabled: bool,
-    /// File path for log output
     pub file_path: Option<PathBuf>,
-    /// Use JSON format for structured logging
     pub json_format: bool,
-    /// Maximum file size before rotation (in bytes)
     pub max_file_size: u64,
-    /// Number of rotated files to keep
     pub max_files: u32,
 }
 
@@ -32,26 +44,20 @@ impl Default for OutputConfig {
             file_enabled: false,
             file_path: None,
             json_format: false,
-            max_file_size: 10 * 1024 * 1024, // 10MB
+            max_file_size: 10 * 1024 * 1024,
             max_files: 5,
         }
     }
 }
 
-/// Performance and monitoring configuration
+/// Performance and profiling configuration options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceConfig {
-    /// Enable performance profiling
     pub profiling_enabled: bool,
-    /// Enable system monitoring
     pub monitoring_enabled: bool,
-    /// Enable component tracking
     pub component_tracking_enabled: bool,
-    /// Buffer size for async logging
     pub buffer_size: usize,
-    /// Enable buffered output
     pub buffering_enabled: bool,
-    /// Enable async logging (requires async feature)
     #[cfg(feature = "async")]
     pub async_enabled: bool,
 }
@@ -70,27 +76,23 @@ impl Default for PerformanceConfig {
     }
 }
 
-/// Visualization configuration settings
+/// Visualization and chart generation configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct VisualizationConfig {
-    /// Chart configuration for visualization
     pub chart_config: Option<ChartConfig>,
-    /// Auto-generate charts on component tracking completion
     pub auto_generate_charts: bool,
-    /// Default output directory for generated charts
     pub output_directory: Option<PathBuf>,
 }
 
-/// Main configuration for telelog logger
+/// Main configuration for the logger.
+///
+/// Combines output, performance, and visualization settings with a builder pattern
+/// for easy configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// Minimum log level to output
     pub min_level: LogLevel,
-    /// Output configuration
     pub output: OutputConfig,
-    /// Performance and monitoring configuration
     pub performance: PerformanceConfig,
-    /// Visualization configuration
     pub visualization: VisualizationConfig,
 }
 
@@ -106,105 +108,107 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Create a new configuration with default values
+    /// Creates a new configuration with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set minimum log level
+    /// Sets the minimum log level for filtering messages.
     pub fn with_min_level(mut self, level: LogLevel) -> Self {
         self.min_level = level;
         self
     }
 
-    /// Enable or disable console output
+    /// Enables or disables console output.
     pub fn with_console_output(mut self, enabled: bool) -> Self {
         self.output.console_enabled = enabled;
         self
     }
 
-    /// Enable file output with specified path
+    /// Enables file output with the specified path.
     pub fn with_file_output<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.output.file_enabled = true;
         self.output.file_path = Some(path.into());
         self
     }
 
-    /// Enable or disable JSON format
+    /// Enables or disables JSON format for structured logging.
     pub fn with_json_format(mut self, enabled: bool) -> Self {
         self.output.json_format = enabled;
         self
     }
 
-    /// Enable or disable colored output
+    /// Enables or disables colored console output.
     pub fn with_colored_output(mut self, enabled: bool) -> Self {
         self.output.colored_output = enabled;
         self
     }
 
-    /// Enable or disable performance profiling
+    /// Enables or disables performance profiling.
     pub fn with_profiling(mut self, enabled: bool) -> Self {
         self.performance.profiling_enabled = enabled;
         self
     }
 
-    /// Enable or disable system monitoring
+    /// Enables or disables system monitoring.
     pub fn with_monitoring(mut self, enabled: bool) -> Self {
         self.performance.monitoring_enabled = enabled;
         self
     }
 
-    /// Set buffer size for async logging
+    /// Sets the buffer size for buffered output.
     pub fn with_buffer_size(mut self, size: usize) -> Self {
         self.performance.buffer_size = size;
         self
     }
 
-    /// Set file rotation parameters
+    /// Configures file rotation with maximum file size and file count.
     pub fn with_file_rotation(mut self, max_size: u64, max_files: u32) -> Self {
         self.output.max_file_size = max_size;
         self.output.max_files = max_files;
         self
     }
 
-    /// Enable async logging (requires async feature)
+    /// Enables or disables async output (requires `async` feature).
     #[cfg(feature = "async")]
     pub fn with_async(mut self, enabled: bool) -> Self {
         self.performance.async_enabled = enabled;
         self
     }
 
-    /// Enable buffered output
+    /// Enables or disables buffered output.
     pub fn with_buffering(mut self, enabled: bool) -> Self {
         self.performance.buffering_enabled = enabled;
         self
     }
 
-    /// Enable component tracking
+    /// Enables or disables component tracking.
     pub fn with_component_tracking(mut self, enabled: bool) -> Self {
         self.performance.component_tracking_enabled = enabled;
         self
     }
 
-    /// Set chart configuration for visualization
+    /// Sets the chart configuration for visualization.
     pub fn with_chart_config(mut self, config: ChartConfig) -> Self {
         self.visualization.chart_config = Some(config);
         self
     }
 
-    /// Enable auto-generation of charts
+    /// Enables or disables automatic chart generation.
     pub fn with_auto_generate_charts(mut self, enabled: bool) -> Self {
         self.visualization.auto_generate_charts = enabled;
         self
     }
 
-    /// Set output directory for generated charts
+    /// Sets the output directory for generated charts.
     pub fn with_chart_output_directory<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.visualization.output_directory = Some(path.into());
         self
     }
 
-    /// Create a development configuration (debug level, colored console)
+    /// Creates a preset development configuration.
+    ///
+    /// Includes debug logging, colored console output, profiling, and component tracking.
     pub fn development() -> Self {
         Self::new()
             .with_min_level(LogLevel::Debug)
@@ -214,7 +218,9 @@ impl Config {
             .with_component_tracking(true)
     }
 
-    /// Create a production configuration (info level, JSON format, file output)
+    /// Creates a preset production configuration.
+    ///
+    /// Uses info-level logging, JSON format, file output, and system monitoring.
     pub fn production<P: Into<PathBuf>>(log_file: P) -> Self {
         Self::new()
             .with_min_level(LogLevel::Info)
@@ -225,7 +231,9 @@ impl Config {
             .with_monitoring(true)
     }
 
-    /// Create a performance analysis configuration with visualization
+    /// Creates a configuration optimized for performance analysis with visualization.
+    ///
+    /// Includes all tracking and monitoring features with timeline chart generation.
     pub fn performance_analysis<P: Into<PathBuf>>(output_dir: P) -> Self {
         let chart_config = ChartConfig::new()
             .with_chart_type(ChartType::Timeline)
@@ -243,7 +251,15 @@ impl Config {
             .with_chart_output_directory(output_dir)
     }
 
-    /// Validate the configuration
+    /// Validates the configuration for correctness.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - File output is enabled but no path is specified
+    /// - Buffer size is zero
+    /// - Max file size is zero
+    /// - Auto-generate charts is enabled without chart configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.output.file_enabled && self.output.file_path.is_none() {
             return Err("File output enabled but no file path specified".to_string());
