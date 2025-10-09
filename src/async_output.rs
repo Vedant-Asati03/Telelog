@@ -1,4 +1,22 @@
-//! Async logging support
+//! Asynchronous logging support with bounded channels and backpressure control.
+//!
+//! This module provides [`AsyncOutput`], which processes log messages in a background
+//! task with batching for improved performance. It uses bounded channels to prevent
+//! memory exhaustion under high load.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use telelog::{AsyncOutput, Logger};
+//! use std::sync::Arc;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let logger = Logger::new("app");
+//!     // AsyncOutput handles batching automatically
+//!     logger.info("Async logging active");
+//! }
+//! ```
 
 #[cfg(feature = "async")]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,19 +31,30 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Async output destination that buffers messages and sends them to background tasks
+/// Asynchronous output destination with bounded channel and backpressure.
+///
+/// Messages are batched and processed in a background task for optimal performance.
+/// When the channel is full (capacity: 1000), writes will fail with `WouldBlock` error.
 #[cfg(feature = "async")]
 pub struct AsyncOutput {
-    sender: mpsc::UnboundedSender<LogMessage>,
+    sender: mpsc::Sender<LogMessage>,
     _handle: tokio::task::JoinHandle<()>,
     shutdown: Arc<AtomicBool>,
 }
 
 #[cfg(feature = "async")]
 impl AsyncOutput {
-    /// Create a new async output with the given destination
+    /// Creates a new async output that wraps the given destination.
+    ///
+    /// # Arguments
+    ///
+    /// * `destination` - The underlying output destination to write to
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the background task cannot be spawned.
     pub fn new(destination: Arc<dyn OutputDestination>) -> std::io::Result<Self> {
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = mpsc::channel(1000);
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown_clone = Arc::clone(&shutdown);
 
@@ -40,9 +69,12 @@ impl AsyncOutput {
         })
     }
 
-    /// Background task that processes log messages
+    /// Background task that processes log messages with batching.
+    ///
+    /// Messages are collected into batches of up to 100 messages or 100ms intervals,
+    /// whichever comes first. This reduces I/O overhead while maintaining responsiveness.
     async fn background_task(
-        mut receiver: mpsc::UnboundedReceiver<LogMessage>,
+        mut receiver: mpsc::Receiver<LogMessage>,
         destination: Arc<dyn OutputDestination>,
         shutdown: Arc<AtomicBool>,
     ) {
@@ -51,12 +83,10 @@ impl AsyncOutput {
         let flush_interval = Duration::from_millis(100);
 
         loop {
-            // Try to receive messages with timeout for periodic flushing
             match timeout(flush_interval, receiver.recv()).await {
                 Ok(Some(message)) => {
                     batch.push(message);
 
-                    // Collect more messages up to batch size
                     while batch.len() < batch_size {
                         match receiver.try_recv() {
                             Ok(message) => batch.push(message),
@@ -64,19 +94,16 @@ impl AsyncOutput {
                         }
                     }
 
-                    // Process the batch
                     Self::process_batch(&batch, &destination).await;
                     batch.clear();
                 }
                 Ok(None) => {
-                    // Channel closed, process remaining messages and exit
                     if !batch.is_empty() {
                         Self::process_batch(&batch, &destination).await;
                     }
                     break;
                 }
                 Err(_) => {
-                    // Timeout - flush any pending messages
                     if !batch.is_empty() {
                         Self::process_batch(&batch, &destination).await;
                         batch.clear();
@@ -84,9 +111,7 @@ impl AsyncOutput {
                 }
             }
 
-            // Check for shutdown signal
             if shutdown.load(Ordering::Relaxed) {
-                // Process remaining messages
                 while let Ok(message) = receiver.try_recv() {
                     batch.push(message);
                 }
@@ -98,7 +123,9 @@ impl AsyncOutput {
         }
     }
 
-    /// Process a batch of log messages
+    /// Processes a batch of log messages sequentially.
+    ///
+    /// Writes all messages in the batch and flushes the destination once.
     async fn process_batch(batch: &[LogMessage], destination: &Arc<dyn OutputDestination>) {
         for message in batch {
             if let Err(e) = destination.write(message.level, &message.data) {
@@ -106,20 +133,23 @@ impl AsyncOutput {
             }
         }
 
-        // Flush after processing batch
         if let Err(e) = destination.flush() {
             eprintln!("Async log flush error: {}", e);
         }
     }
 
-    /// Shutdown the async logger and wait for pending messages
+    /// Gracefully shuts down the async output and waits for pending messages.
+    ///
+    /// This ensures all buffered messages are written before the output is closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the background task panicked or failed to complete.
     pub async fn shutdown(self) -> std::io::Result<()> {
         self.shutdown.store(true, Ordering::Relaxed);
 
-        // Close the sender to signal the background task
         drop(self.sender);
 
-        // Wait for the background task to complete
         match self._handle.await {
             Ok(_) => Ok(()),
             Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
@@ -129,13 +159,20 @@ impl AsyncOutput {
 
 #[cfg(feature = "async")]
 impl OutputDestination for AsyncOutput {
+    /// Writes a log message to the async output channel.
+    ///
+    /// Uses non-blocking `try_send` to provide backpressure when the channel is full.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WouldBlock` error if the channel is at capacity (1000 messages).
     fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> std::io::Result<()> {
         let message = LogMessage::new(level, data.clone());
 
-        self.sender.send(message).map_err(|e| {
+        self.sender.try_send(message).map_err(|e| {
             std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Failed to send log message: {}", e),
+                std::io::ErrorKind::WouldBlock,
+                format!("Log channel full (backpressure active): {}", e),
             )
         })?;
 
@@ -143,8 +180,6 @@ impl OutputDestination for AsyncOutput {
     }
 
     fn flush(&self) -> std::io::Result<()> {
-        // For async output, flush is handled by the background task
-        // We could implement a flush mechanism using additional channels if needed
         Ok(())
     }
 }
