@@ -1,42 +1,38 @@
-//! Component Tracking Example
-//! Demonstrates tracking architectural components and their relationships.
+//! Tracking different components of your application.
 
 use telelog::Logger;
-use std::{thread, time::Duration};
+
+fn database_operations(logger: &Logger) {
+    let _component = logger.track_component("database");
+    logger.info("Database connection established");
+    logger.info("Running migration scripts");
+    logger.info("Database ready");
+}
+
+fn api_operations(logger: &Logger) {
+    let _component = logger.track_component("api");
+    logger.info("API server starting");
+    logger.info("Routes registered");
+    logger.info("API server listening on port 8080");
+}
+
+fn auth_operations(logger: &Logger) {
+    let _component = logger.track_component("auth");
+    logger.info("Auth service initialized");
+    logger.info("JWT validation enabled");
+    logger.info("Auth ready");
+}
 
 fn main() {
-    let logger = Logger::new("component_demo");
-    
-    logger.info("Starting component tracking demo");
-    
-    // Track web server component
-    {
-        let _web_server = logger.track_component("web_server");
-        logger.info("Web server handling request");
-        
-        // Track authentication service
-        {
-            let _auth_service = logger.track_component("auth_service");
-            thread::sleep(Duration::from_millis(50));  // Simulate auth work
-            logger.info("User authenticated");
-        }
-        
-        // Track database layer
-        {
-            let _database = logger.track_component("database");
-            thread::sleep(Duration::from_millis(80));  // Simulate DB work
-            logger.info("Data retrieved");
-        }
-        
-        // Track response generation
-        {
-            let _response_builder = logger.track_component("response_builder");
-            thread::sleep(Duration::from_millis(30));  // Simulate response building
-            logger.info("Response generated");
-        }
-        
-        logger.info("Request completed");
-    }
-    
+    let logger = Logger::new("app");
+
+    logger.info("Application starting");
+
+    database_operations(&logger);
+    api_operations(&logger);
+    auth_operations(&logger);
+
+    logger.info("All components initialized");
+
     println!("✅ Component tracking example finished");
 }
