@@ -45,6 +45,7 @@ Documentation = "https://github.com/vedant-asati03/telelog#readme"
 [tool.maturin]
 features = ["python"]
 module-name = "telelog"
+include = ["telelog/py.typed", "telelog/*.pyi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
