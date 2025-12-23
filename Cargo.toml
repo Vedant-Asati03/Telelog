@@ -1,6 +1,6 @@
 [package]
 name = "telelog"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "High-performance structured logging library for Rust with rich visualization capabilities"
 license = "MIT OR Apache-2.0"
