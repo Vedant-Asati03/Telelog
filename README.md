@@ -1,5 +1,10 @@
 ![](./assets/mascot.png)
 
+[![crates.io](https://img.shields.io/crates/v/telelog.svg)](https://crates.io/crates/telelog)
+[![downloads](https://img.shields.io/crates/d/telelog.svg)](https://crates.io/crates/telelog)
+[![PyPI version](https://img.shields.io/pypi/v/telelog-python.svg)](https://pypi.org/project/telelog-python/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/telelog-python.svg)](https://pypi.org/project/telelog-python/)
+
 **High-performance structured logging library with component tracking and visualization**
 
 Telelog is a Rust-first logging library that combines structured logging, performance profiling, and architectural visualization. It provides rich console output and generates Mermaid diagrams to help you understand your application's execution flow.
