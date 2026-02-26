@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Index - Criterion.rs</title>
+    <style type="text/css">
+        body {
+            font: 14px Helvetica Neue;
+            text-rendering: optimizelegibility;
+        }
+
+        .body {
+            width: 960px;
+            margin: auto;
+        }
+
+        a:link {
+            color: #1F78B4;
+            text-decoration: none;
+        }
+
+        h2 {
+            font-size: 36px;
+            font-weight: 300;
+        }
+
+        h3 {
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        #footer {
+            height: 40px;
+            background: #888;
+            color: white;
+            font-size: larger;
+            font-weight: 300;
+        }
+
+        #footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        #footer p {
+            text-align: center
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #888;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="body">
+        <h2>Criterion.rs Benchmark Index</h2>
+        See individual benchmark pages below for more details.
+        <ul>
+            <li><a href="../basic_logging/report/index.html">basic_logging</a></li>
+            
+            <ul>
+                <li><a href="../basic_logging/critical/report/index.html">critical</a></li>
+                <li><a href="../basic_logging/debug/report/index.html">debug</a></li>
+                <li><a href="../basic_logging/error/report/index.html">error</a></li>
+                <li><a href="../basic_logging/info/report/index.html">info</a></li>
+                <li><a href="../basic_logging/warning/report/index.html">warning</a></li>
+            </ul>
+            <li><a href="../component_tracking/report/index.html">component_tracking</a></li>
+            
+            <ul>
+                <li><a href="../component_tracking/component_guard_create_drop/report/index.html">component_guard_create_drop</a></li>
+                <li><a href="../component_tracking/component_tracker_len/report/index.html">component_tracker_len</a></li>
+                <li><a href="../component_tracking/nested_components_2_deep/report/index.html">nested_components_2_deep</a></li>
+                <li><a href="../component_tracking/sequential_5_components/report/index.html">sequential_5_components</a></li>
+            </ul>
+            <li><a href="../concurrent_logging/report/index.html">concurrent_logging</a></li>
+            
+            <ul>
+                <li><a href="../concurrent_logging/8_threads_cloned_logger/report/index.html">8_threads_cloned_logger</a></li>
+                <li><a href="../concurrent_logging/threads/report/index.html">threads</a></li>
+            </ul>
+            <li><a href="../context_management/report/index.html">context_management</a></li>
+            
+            <ul>
+                <li><a href="../context_management/add_context/report/index.html">add_context</a></li>
+                <li><a href="../context_management/clear_context/report/index.html">clear_context</a></li>
+                <li><a href="../context_management/context_guard_create_drop/report/index.html">context_guard_create_drop</a></li>
+                <li><a href="../context_management/log_inside_context_guard/report/index.html">log_inside_context_guard</a></li>
+                <li><a href="../context_management/log_with_context_1_key/report/index.html">log_with_context_1_key</a></li>
+                <li><a href="../context_management/log_with_context_5_keys/report/index.html">log_with_context_5_keys</a></li>
+                <li><a href="../context_management/remove_context/report/index.html">remove_context</a></li>
+            </ul>
+            <li><a href="../file_output/report/index.html">file_output</a></li>
+            
+            <ul>
+                <li><a href="../file_output/buffered_file/report/index.html">buffered_file</a></li>
+                <li><a href="../file_output/json_file/report/index.html">json_file</a></li>
+                <li><a href="../file_output/plain_text_file/report/index.html">plain_text_file</a></li>
+                <li><a href="../file_output/rotating_file/report/index.html">rotating_file</a></li>
+            </ul>
+            <li><a href="../high_volume/report/index.html">high_volume</a></li>
+            
+            <ul>
+                <li><a href="../high_volume/100_buffered_messages/report/index.html">100_buffered_messages</a></li>
+                <li><a href="../high_volume/100_mixed_levels/report/index.html">100_mixed_levels</a></li>
+                <li><a href="../high_volume/100_plain_messages/report/index.html">100_plain_messages</a></li>
+                <li><a href="../high_volume/100_structured_messages/report/index.html">100_structured_messages</a></li>
+            </ul>
+            <li><a href="../level_filtering/report/index.html">level_filtering</a></li>
+            
+            <ul>
+                <li><a href="../level_filtering/filtered_debug/report/index.html">filtered_debug</a></li>
+                <li><a href="../level_filtering/filtered_info/report/index.html">filtered_info</a></li>
+                <li><a href="../level_filtering/passing_error/report/index.html">passing_error</a></li>
+                <li><a href="../level_filtering/passing_warning/report/index.html">passing_warning</a></li>
+            </ul>
+            <li><a href="../logger_init/report/index.html">logger_init</a></li>
+            
+            <ul>
+                <li><a href="../logger_init/clone_existing/report/index.html">clone_existing</a></li>
+                <li><a href="../logger_init/default/report/index.html">default</a></li>
+                <li><a href="../logger_init/development_preset/report/index.html">development_preset</a></li>
+                <li><a href="../logger_init/silent_config/report/index.html">silent_config</a></li>
+                <li><a href="../logger_init/with_buffering_config/report/index.html">with_buffering_config</a></li>
+            </ul>
+            <li><a href="../output_modes/report/index.html">output_modes</a></li>
+            
+            <ul>
+                <li><a href="../output_modes/buffered_info/report/index.html">buffered_info</a></li>
+                <li><a href="../output_modes/json_format_info/report/index.html">json_format_info</a></li>
+                <li><a href="../output_modes/json_format_structured/report/index.html">json_format_structured</a></li>
+                <li><a href="../output_modes/null_sink_info/report/index.html">null_sink_info</a></li>
+                <li><a href="../output_modes/plain_text_info/report/index.html">plain_text_info</a></li>
+                <li><a href="../output_modes/plain_text_structured/report/index.html">plain_text_structured</a></li>
+            </ul>
+            <li><a href="../performance_profiling/report/index.html">performance_profiling</a></li>
+            
+            <ul>
+                <li><a href="../performance_profiling/nested_profiles_2_deep/report/index.html">nested_profiles_2_deep</a></li>
+                <li><a href="../performance_profiling/nested_profiles_3_deep/report/index.html">nested_profiles_3_deep</a></li>
+                <li><a href="../performance_profiling/profile_guard_create_drop/report/index.html">profile_guard_create_drop</a></li>
+                <li><a href="../performance_profiling/profile_guard_elapsed/report/index.html">profile_guard_elapsed</a></li>
+            </ul>
+            <li><a href="../structured_logging/report/index.html">structured_logging</a></li>
+            
+            <ul>
+                <li><a href="../structured_logging/10_fields/report/index.html">10_fields</a></li>
+                <li><a href="../structured_logging/1_field/report/index.html">1_field</a></li>
+                <li><a href="../structured_logging/5_fields/report/index.html">5_fields</a></li>
+                <li><a href="../structured_logging/log_with_5_fields/report/index.html">log_with_5_fields</a></li>
+            </ul>
+            <li><a href="../visualization/report/index.html">visualization</a></li>
+            
+            <ul>
+                <li><a href="../visualization/flowchart_20_components/report/index.html">flowchart_20_components</a></li>
+                <li><a href="../visualization/flowchart_5_components/report/index.html">flowchart_5_components</a></li>
+                <li><a href="../visualization/gantt_5_components/report/index.html">gantt_5_components</a></li>
+                <li><a href="../visualization/logger_generate_visualization_flowchart/report/index.html">logger_generate_visualization_flowchart</a></li>
+                <li><a href="../visualization/timeline_20_components/report/index.html">timeline_20_components</a></li>
+                <li><a href="../visualization/timeline_5_components/report/index.html">timeline_5_components</a></li>
+            </ul>
+        </ul>
+    </div>
+    <div id="footer">
+        <p>This report was generated by
+            <a href="https://github.com/criterion-rs/criterion.rs">Criterion.rs</a>, a statistics-driven benchmarking
+            library in Rust.</p>
+    </div>
+</body>
+</html>
