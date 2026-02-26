@@ -2,6 +2,9 @@
 /target
 Cargo.lock
 
+# Benchmark reports (published to gh-pages, not committed to main)
+benches/reports/
+
 # Python artifacts
 __pycache__/
 *.py[cod]
