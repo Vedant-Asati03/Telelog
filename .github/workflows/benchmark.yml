@@ -1,8 +1,6 @@
 name: Benchmarks
 
 on:
-  schedule:
-    - cron: "0 3 * * 1"  # Every Monday at 03:00 UTC
   pull_request:
     branches:
       - main
