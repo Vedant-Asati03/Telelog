@@ -43,7 +43,10 @@ impl Config {
     }
 
     /// Set minimum log level (debug, info, warning, error, critical)
-    fn with_min_level(&mut self, level: &str) -> PyResult<()> {
+    fn with_min_level<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        level: &str,
+    ) -> PyResult<pyo3::Bound<'py, Self>> {
         let log_level = match level.to_lowercase().as_str() {
             "debug" => LogLevel::Debug,
             "info" => LogLevel::Info,
@@ -57,36 +60,90 @@ impl Config {
                 )))
             }
         };
-        self.inner = self.inner.clone().with_min_level(log_level);
-        Ok(())
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_min_level(log_level);
+        Ok(slf)
     }
 
-    fn with_console_output(&mut self, enabled: bool) {
-        self.inner = self.inner.clone().with_console_output(enabled);
+    fn with_console_output<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        enabled: bool,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_console_output(enabled);
+        slf
     }
 
-    fn with_file_output(&mut self, path: &str) {
-        self.inner = self.inner.clone().with_file_output(path);
+    fn with_file_output<'py>(slf: pyo3::Bound<'py, Self>, path: &str) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_file_output(path);
+        slf
     }
 
-    fn with_json_format(&mut self, enabled: bool) {
-        self.inner = self.inner.clone().with_json_format(enabled);
+    fn with_json_format<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_json_format(enabled);
+        slf
     }
 
-    fn with_colored_output(&mut self, enabled: bool) {
-        self.inner = self.inner.clone().with_colored_output(enabled);
+    fn with_colored_output<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        enabled: bool,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_colored_output(enabled);
+        slf
     }
 
-    fn with_profiling(&mut self, enabled: bool) {
-        self.inner = self.inner.clone().with_profiling(enabled);
+    fn with_profiling<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_profiling(enabled);
+        slf
     }
 
-    fn with_buffering(&mut self, enabled: bool) {
-        self.inner = self.inner.clone().with_buffering(enabled);
+    fn with_monitoring<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_monitoring(enabled);
+        slf
     }
 
-    fn with_buffer_size(&mut self, size: usize) {
-        self.inner = self.inner.clone().with_buffer_size(size);
+    fn with_file_rotation<'py>(slf: pyo3::Bound<'py, Self>, max_size: u64, max_files: u32) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_file_rotation(max_size, max_files);
+        slf
+    }
+
+    #[cfg(feature = "async")]
+    fn with_async<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_async(enabled);
+        slf
+    }
+
+    #[cfg(not(feature = "async"))]
+    fn with_async<'py>(slf: pyo3::Bound<'py, Self>, _enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf // No-op if async feature is missing
+    }
+
+    fn with_buffering<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_buffering(enabled);
+        slf
+    }
+
+    fn with_component_tracking<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_component_tracking(enabled);
+        slf
+    }
+
+    fn with_chart_config<'py>(slf: pyo3::Bound<'py, Self>, config: &VisualizationConfig) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_chart_config(config.inner.clone());
+        slf
+    }
+
+    fn with_auto_generate_charts<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_auto_generate_charts(enabled);
+        slf
+    }
+
+    fn with_chart_output_directory<'py>(slf: pyo3::Bound<'py, Self>, path: &str) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_chart_output_directory(path);
+        slf
+    }
+
+    fn with_buffer_size<'py>(slf: pyo3::Bound<'py, Self>, size: usize) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_buffer_size(size);
+        slf
     }
 }
 
@@ -370,7 +427,10 @@ impl VisualizationConfig {
         }
     }
 
-    fn with_chart_type(&mut self, chart_type: &str) -> PyResult<()> {
+    fn with_chart_type<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        chart_type: &str,
+    ) -> PyResult<pyo3::Bound<'py, Self>> {
         let chart_type = match chart_type.to_lowercase().as_str() {
             "flowchart" => ChartType::Flowchart,
             "timeline" => ChartType::Timeline,
@@ -382,11 +442,14 @@ impl VisualizationConfig {
                 )))
             }
         };
-        self.inner = self.inner.clone().with_chart_type(chart_type);
-        Ok(())
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_chart_type(chart_type);
+        Ok(slf)
     }
 
-    fn with_direction(&mut self, direction: &str) -> PyResult<()> {
+    fn with_direction<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        direction: &str,
+    ) -> PyResult<pyo3::Bound<'py, Self>> {
         let direction = match direction.to_lowercase().as_str() {
             "topdown" | "td" | "tb" => Direction::TopDown,
             "bottomup" | "bu" | "bt" => Direction::BottomUp,
@@ -399,20 +462,26 @@ impl VisualizationConfig {
                 )))
             }
         };
-        self.inner = self.inner.clone().with_direction(direction);
-        Ok(())
+        slf.borrow_mut().inner = slf.borrow().inner.clone().with_direction(direction);
+        Ok(slf)
     }
 
-    fn set_timing(&mut self, show_timing: bool) {
-        self.inner.show_timing = show_timing;
+    fn set_timing<'py>(slf: pyo3::Bound<'py, Self>, show_timing: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner.show_timing = show_timing;
+        slf
     }
 
-    fn set_memory(&mut self, show_memory: bool) {
-        self.inner.show_memory = show_memory;
+    fn set_memory<'py>(slf: pyo3::Bound<'py, Self>, show_memory: bool) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner.show_memory = show_memory;
+        slf
     }
 
-    fn set_metadata(&mut self, show_metadata: bool) {
-        self.inner.show_metadata = show_metadata;
+    fn set_metadata<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        show_metadata: bool,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner.show_metadata = show_metadata;
+        slf
     }
 }
 
