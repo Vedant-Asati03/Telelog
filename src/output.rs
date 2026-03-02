@@ -29,9 +29,70 @@ use std::sync::Arc;
 /// Trait for log message output destinations.
 ///
 /// Implement this trait to create custom output destinations.
+use serde::ser::{SerializeMap, Serializer};
+
+#[derive(Clone, Debug)]
+pub struct LogRecord<'a> {
+    pub timestamp: &'a str,
+    pub level: LogLevel,
+    pub logger: &'a str,
+    pub message: &'a str,
+    pub context: &'a HashMap<String, String>,
+    pub data: Option<&'a [(&'a str, &'a str)]>,
+}
+
+impl<'a> LogRecord<'a> {
+    pub fn to_hashmap(&self) -> HashMap<String, Value> {
+        let mut map = HashMap::with_capacity(
+            4 + self.context.len() + self.data.map(|d| d.len()).unwrap_or(0),
+        );
+        map.insert(
+            "timestamp".to_string(),
+            Value::String(self.timestamp.to_string()),
+        );
+        map.insert("level".to_string(), Value::String(self.level.to_string()));
+        map.insert("logger".to_string(), Value::String(self.logger.to_string()));
+        map.insert(
+            "message".to_string(),
+            Value::String(self.message.to_string()),
+        );
+        for (k, v) in self.context {
+            map.insert(k.clone(), Value::String(v.clone()));
+        }
+        if let Some(data) = self.data {
+            for (k, v) in data {
+                map.insert(k.to_string(), Value::String(v.to_string()));
+            }
+        }
+        map
+    }
+}
+
+impl<'a> serde::Serialize for LogRecord<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("timestamp", self.timestamp)?;
+        map.serialize_entry("level", self.level.as_str())?;
+        map.serialize_entry("logger", self.logger)?;
+        map.serialize_entry("message", self.message)?;
+        for (k, v) in self.context {
+            map.serialize_entry(k, v)?;
+        }
+        if let Some(d) = self.data {
+            for (k, v) in d {
+                map.serialize_entry(k, v)?;
+            }
+        }
+        map.end()
+    }
+}
+
 pub trait OutputDestination: Send + Sync {
-    /// Writes a log message with the given level and structured data.
-    fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()>;
+    /// Writes a log message.
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()>;
 
     /// Flushes any buffered output to ensure data is written.
     fn flush(&self) -> io::Result<()>;
@@ -54,10 +115,11 @@ impl ConsoleOutput {
 }
 
 impl OutputDestination for ConsoleOutput {
-    fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
-        let timestamp = data.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-        let logger = data.get("logger").and_then(|v| v.as_str()).unwrap_or("");
-        let message = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()> {
+        let timestamp = record.timestamp;
+        let logger = record.logger;
+        let message = record.message;
+        let level = record.level;
 
         if self.colored {
             #[cfg(feature = "console")]
@@ -130,20 +192,19 @@ impl FileOutput {
 }
 
 impl OutputDestination for FileOutput {
-    fn write(&self, _level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()> {
         let mut writer = self.writer.lock();
 
         if self.json_format {
-            let json = serde_json::to_string(data)
+            let json = serde_json::to_string(record)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
             writeln!(writer, "{}", json)?;
         } else {
-            let timestamp = data.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-            let level = data.get("level").and_then(|v| v.as_str()).unwrap_or("");
-            let logger = data.get("logger").and_then(|v| v.as_str()).unwrap_or("");
-            let message = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
-
-            writeln!(writer, "{} [{}] {}: {}", timestamp, level, logger, message)?;
+            writeln!(
+                writer,
+                "{} [{}] {}: {}",
+                record.timestamp, record.level, record.logger, record.message
+            )?;
         }
 
         Ok(())
@@ -272,21 +333,21 @@ impl RotatingFileOutput {
 }
 
 impl OutputDestination for RotatingFileOutput {
-    fn write(&self, _level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()> {
         self.rotate_if_needed()?;
         self.ensure_file()?;
 
         let mut current = self.current_file.lock();
         if let Some(ref mut writer) = *current {
             let content = if self.json_format {
-                let json = serde_json::to_string(data)
+                let json = serde_json::to_string(record)
                     .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                 format!("{}\n", json)
             } else {
-                let timestamp = data.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-                let level = data.get("level").and_then(|v| v.as_str()).unwrap_or("");
-                let logger = data.get("logger").and_then(|v| v.as_str()).unwrap_or("");
-                let message = data.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                let timestamp = record.timestamp;
+                let level = record.level;
+                let logger = record.logger;
+                let message = record.message;
 
                 format!("{} [{}] {}: {}\n", timestamp, level, logger, message)
             };
@@ -331,9 +392,9 @@ impl MultiOutput {
 }
 
 impl OutputDestination for MultiOutput {
-    fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()> {
         for output in &self.outputs {
-            if let Err(e) = output.write(level, data) {
+            if let Err(e) = output.write(record) {
                 eprintln!("Output error: {}", e);
             }
         }
@@ -400,7 +461,42 @@ impl BufferedOutput {
         let mut buffer = self.buffer.lock();
 
         for message in buffer.drain(..) {
-            self.destination.write(message.level, &message.data)?;
+            let timestamp = message
+                .data
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let logger = message
+                .data
+                .get("logger")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let msg = message
+                .data
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            // To pass context & data correctly without allocation, we iterate over the leftovers
+            let mut ctx_map = HashMap::new();
+            for (k, v) in &message.data {
+                if k != "timestamp" && k != "level" && k != "logger" && k != "message" {
+                    if let Value::String(s) = v {
+                        ctx_map.insert(k.clone(), s.clone());
+                    }
+                }
+            }
+
+            let record = LogRecord {
+                timestamp,
+                level: message.level,
+                logger,
+                message: msg,
+                context: &ctx_map,
+                data: None,
+            };
+
+            self.destination.write(&record)?;
         }
 
         self.destination.flush()?;
@@ -414,8 +510,8 @@ impl BufferedOutput {
 }
 
 impl OutputDestination for BufferedOutput {
-    fn write(&self, level: LogLevel, data: &HashMap<String, Value>) -> io::Result<()> {
-        let message = LogMessage::new(level, data.clone());
+    fn write(&self, record: &LogRecord<'_>) -> io::Result<()> {
+        let message = LogMessage::new(record.level, record.to_hashmap());
         let mut buffer = self.buffer.lock();
 
         buffer.push(message);
@@ -461,7 +557,16 @@ mod tests {
             Value::String("Test message".to_string()),
         );
 
-        assert!(output.write(LogLevel::Info, &data).is_ok());
+        assert!(output
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Info,
+                logger: "test",
+                message: "Test message",
+                context: &HashMap::new(),
+                data: None
+            })
+            .is_ok());
         assert!(output.flush().is_ok());
     }
 
@@ -482,7 +587,16 @@ mod tests {
             Value::String("Test message".to_string()),
         );
 
-        assert!(output.write(LogLevel::Info, &data).is_ok());
+        assert!(output
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Info,
+                logger: "test",
+                message: "Test message",
+                context: &HashMap::new(),
+                data: None
+            })
+            .is_ok());
         assert!(output.flush().is_ok());
 
         let content = std::fs::read_to_string(temp_file.path()).unwrap();
@@ -505,7 +619,16 @@ mod tests {
             Value::String("Multi test".to_string()),
         );
 
-        assert!(multi_output.write(LogLevel::Info, &data).is_ok());
+        assert!(multi_output
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Info,
+                logger: "test",
+                message: "Test message",
+                context: &HashMap::new(),
+                data: None
+            })
+            .is_ok());
         assert!(multi_output.flush().is_ok());
     }
 
@@ -522,14 +645,41 @@ mod tests {
         );
 
         // Add messages to buffer
-        buffered.write(LogLevel::Info, &data).unwrap();
+        buffered
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Info,
+                logger: "test",
+                message: "Buffered message",
+                context: &HashMap::new(),
+                data: None,
+            })
+            .unwrap();
         assert_eq!(buffered.buffer_len(), 1);
 
-        buffered.write(LogLevel::Warning, &data).unwrap();
+        buffered
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Warning,
+                logger: "test",
+                message: "Buffered message",
+                context: &HashMap::new(),
+                data: None,
+            })
+            .unwrap();
         assert_eq!(buffered.buffer_len(), 2);
 
         // This should trigger auto-flush
-        buffered.write(LogLevel::Error, &data).unwrap();
+        buffered
+            .write(&LogRecord {
+                timestamp: "2025-09-07T10:30:00Z",
+                level: LogLevel::Error,
+                logger: "test",
+                message: "Buffered message",
+                context: &HashMap::new(),
+                data: None,
+            })
+            .unwrap();
         assert_eq!(buffered.buffer_len(), 0);
 
         // Verify content was written to file
