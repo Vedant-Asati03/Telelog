@@ -3,7 +3,7 @@
 [![crates.io](https://img.shields.io/crates/v/telelog.svg)](https://crates.io/crates/telelog)
 [![downloads](https://img.shields.io/crates/d/telelog.svg)](https://crates.io/crates/telelog)
 [![PyPI version](https://img.shields.io/pypi/v/telelog-python.svg)](https://pypi.org/project/telelog-python/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/telelog-python.svg)](https://pypi.org/project/telelog-python/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/telelog-python?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/telelog-python)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-view%20results-blue)](https://vedant-asati03.github.io/Telelog/benchmarks/report/index.html)
 
 **High-performance structured logging library with component tracking and visualization**
