@@ -64,9 +64,6 @@ pub mod output;
 pub mod profile;
 pub mod visualization;
 
-#[cfg(feature = "async")]
-pub mod async_output;
-
 #[cfg(feature = "system-monitor")]
 pub mod monitor;
 
@@ -77,12 +74,12 @@ pub use config::Config;
 pub use context::{Context, ContextGuard};
 pub use level::LogLevel;
 pub use logger::Logger;
-pub use output::{BufferedOutput, LogMessage};
+pub use output::{BufferedOutput, ConsoleOutput, FileOutput, MultiOutput};
 pub use profile::ProfileGuard;
 pub use visualization::{ChartConfig, ChartType, Direction, MermaidGenerator};
 
 #[cfg(feature = "async")]
-pub use async_output::AsyncOutput;
+pub use output::AsyncOutput;
 
 #[cfg(feature = "system-monitor")]
 pub use monitor::SystemMonitor;
