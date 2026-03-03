@@ -153,8 +153,16 @@ impl RotatingFileOutput {
 
     fn get_rotated_path(&self, number: u32) -> PathBuf {
         let mut path = self.base_path.clone();
-        let stem = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        let ext = path.extension().unwrap_or_default().to_string_lossy().into_owned();
+        let stem = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let ext = path
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
 
         if ext.is_empty() {
             path.set_file_name(format!("{}.{}", stem, number));
