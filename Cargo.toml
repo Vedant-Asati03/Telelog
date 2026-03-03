@@ -39,6 +39,7 @@ console = { version = "0.16.2", optional = true }
 sysinfo = { version = "0.37.2", optional = true }
 pyo3 = { version = "0.27.2", features = ["extension-module"], optional = true }
 tokio = { version = "1.48.0", features = ["full"], optional = true }
+arc-swap = "1.8.2"
 
 [dev-dependencies]
 criterion = "0.8.2"
