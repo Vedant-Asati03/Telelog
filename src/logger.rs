@@ -117,7 +117,7 @@ impl Logger {
                 level,
                 logger: &self.name,
                 message,
-                context: &*self.context.data.read(),
+                context: &self.context.data.read(),
                 data,
             };
 
@@ -232,10 +232,8 @@ pub(crate) fn build_output_pipeline(config: &Config) -> Arc<dyn OutputDestinatio
                         }
                     }
                 }
-            } else {
-                if let Ok(file) = FileOutput::new(file_path, config.output.json_format) {
-                    multi_output = multi_output.add_output(Box::new(file));
-                }
+            } else if let Ok(file) = FileOutput::new(file_path, config.output.json_format) {
+                multi_output = multi_output.add_output(Box::new(file));
             }
         }
     }
