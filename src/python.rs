@@ -100,8 +100,16 @@ impl Config {
         slf
     }
 
-    fn with_file_rotation<'py>(slf: pyo3::Bound<'py, Self>, max_size: u64, max_files: u32) -> pyo3::Bound<'py, Self> {
-        slf.borrow_mut().inner = slf.borrow().inner.clone().with_file_rotation(max_size, max_files);
+    fn with_file_rotation<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        max_size: u64,
+        max_files: u32,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf
+            .borrow()
+            .inner
+            .clone()
+            .with_file_rotation(max_size, max_files);
         slf
     }
 
@@ -121,22 +129,42 @@ impl Config {
         slf
     }
 
-    fn with_component_tracking<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
+    fn with_component_tracking<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        enabled: bool,
+    ) -> pyo3::Bound<'py, Self> {
         slf.borrow_mut().inner = slf.borrow().inner.clone().with_component_tracking(enabled);
         slf
     }
 
-    fn with_chart_config<'py>(slf: pyo3::Bound<'py, Self>, config: &VisualizationConfig) -> pyo3::Bound<'py, Self> {
-        slf.borrow_mut().inner = slf.borrow().inner.clone().with_chart_config(config.inner.clone());
+    fn with_chart_config<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        config: &VisualizationConfig,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf
+            .borrow()
+            .inner
+            .clone()
+            .with_chart_config(config.inner.clone());
         slf
     }
 
-    fn with_auto_generate_charts<'py>(slf: pyo3::Bound<'py, Self>, enabled: bool) -> pyo3::Bound<'py, Self> {
-        slf.borrow_mut().inner = slf.borrow().inner.clone().with_auto_generate_charts(enabled);
+    fn with_auto_generate_charts<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        enabled: bool,
+    ) -> pyo3::Bound<'py, Self> {
+        slf.borrow_mut().inner = slf
+            .borrow()
+            .inner
+            .clone()
+            .with_auto_generate_charts(enabled);
         slf
     }
 
-    fn with_chart_output_directory<'py>(slf: pyo3::Bound<'py, Self>, path: &str) -> pyo3::Bound<'py, Self> {
+    fn with_chart_output_directory<'py>(
+        slf: pyo3::Bound<'py, Self>,
+        path: &str,
+    ) -> pyo3::Bound<'py, Self> {
         slf.borrow_mut().inner = slf.borrow().inner.clone().with_chart_output_directory(path);
         slf
     }
