@@ -138,6 +138,18 @@ fn bench_level_filtering(c: &mut Criterion) {
         b.iter(|| logger.error("passing error"))
     });
 
+    let config_crit = Config::new()
+        .with_console_output(false)
+        .with_min_level(LogLevel::Critical);
+    let logger_crit = Logger::with_config("bench_filter_crit", config_crit);
+
+    group.bench_function("filtered_warning", |b| {
+        b.iter(|| logger_crit.warning("silenced warning"))
+    });
+    group.bench_function("filtered_error", |b| {
+        b.iter(|| logger_crit.error("silenced error"))
+    });
+
     group.finish();
 }
 
