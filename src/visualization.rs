@@ -314,7 +314,7 @@ impl MermaidGenerator {
 
     fn sanitize_id(&self, id: &str) -> String {
         let cleaned = id.replace(['-', ' ', '.'], "_");
-        if cleaned.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if cleaned.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             format!("node_{}", cleaned)
         } else {
             cleaned
