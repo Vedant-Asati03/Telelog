@@ -1,426 +1,200 @@
-//! Core logger implementation providing structured logging, profiling, and component tracking.
-
 use crate::component::{ComponentGuard, ComponentTracker};
-use crate::output::{
-    BufferedOutput, ConsoleOutput, FileOutput, MultiOutput, OutputDestination, RotatingFileOutput,
-};
-use crate::{config::Config, context::Context, level::LogLevel, profile::ProfileGuard};
+use crate::output::{LogRecord, OutputDestination};
 
-#[cfg(feature = "async")]
-use crate::async_output::AsyncOutput;
+pub struct OutputPipeline(pub Arc<dyn OutputDestination>);
+use crate::{config::Config, context::Context, level::LogLevel};
+
+use arc_swap::ArcSwap;
+use std::cell::RefCell;
+use std::fmt::Write;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
 
 #[cfg(feature = "system-monitor")]
 use crate::monitor::SystemMonitor;
 
-use parking_lot::RwLock;
-use serde_json::Value;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Arc;
-
 thread_local! {
-    /// Thread-local buffer pool to reuse HashMaps and avoid allocations
-    static LOG_BUFFER: RefCell<HashMap<String, Value>> = RefCell::new(HashMap::with_capacity(16));
-
-    /// Thread-local timestamp buffer to avoid allocation
-    static TIMESTAMP_BUFFER: RefCell<String> = RefCell::new(String::with_capacity(35));
+    static TIMESTAMP_BUF: RefCell<String> = RefCell::new(String::with_capacity(35));
 }
 
-/// Main logger instance providing structured logging, context management, and performance profiling.
-///
-/// The logger is thread-safe and can be cloned cheaply for use across multiple threads.
-///
-/// # Examples
-///
-/// ```
-/// use telelog::Logger;
-///
-/// let logger = Logger::new("my_app");
-/// logger.info("Application started");
-///
-/// // Structured logging
-/// logger.info_with("User logged in", &[("user_id", "123")]);
-///
-/// // Context management
-/// logger.add_context("request_id", "abc");
-/// logger.info("Processing"); // includes request_id
-/// logger.clear_context();
-/// ```
 pub struct Logger {
-    name: String,
-    config: Arc<RwLock<Config>>,
-    context: Arc<RwLock<Context>>,
-    output: Arc<dyn OutputDestination>,
+    name: Arc<str>,
+    min_level: AtomicU8,
+    config: ArcSwap<Config>,
+    output: ArcSwap<OutputPipeline>,
+    context: Arc<Context>,
     component_tracker: Arc<ComponentTracker>,
     #[cfg(feature = "system-monitor")]
-    system_monitor: Arc<RwLock<SystemMonitor>>,
+    system_monitor: Arc<parking_lot::RwLock<SystemMonitor>>,
 }
 
 impl Logger {
-    /// Creates a new logger with the given name and default configuration.
     pub fn new(name: &str) -> Self {
         Self::with_config(name, Config::default())
     }
 
-    /// Creates a new logger with a custom configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The logger name, included in all log messages
-    /// * `config` - Configuration for output, performance, and visualization
-    ///
-    /// # Panics
-    ///
-    /// Panics if the configuration fails validation.
     pub fn with_config(name: &str, config: Config) -> Self {
-        if let Err(e) = config.validate() {
-            panic!("Invalid configuration: {}", e);
-        }
-
-        // Build output destinations based on config
-        let output = Self::build_output(&config);
+        config.validate().expect("Invalid Logger Configuration");
+        let output = build_output_pipeline(&config);
+        let output = Arc::new(OutputPipeline(output));
 
         Self {
-            name: name.to_string(),
-            config: Arc::new(RwLock::new(config)),
-            context: Arc::new(RwLock::new(Context::new())),
-            output,
+            name: Arc::from(name),
+            min_level: AtomicU8::new(config.min_level as u8),
+            config: ArcSwap::from_pointee(config),
+            output: ArcSwap::from(output),
+            context: Arc::new(Context::new()),
             component_tracker: Arc::new(ComponentTracker::new()),
             #[cfg(feature = "system-monitor")]
-            system_monitor: Arc::new(RwLock::new(SystemMonitor::new())),
+            system_monitor: Arc::new(parking_lot::RwLock::new(SystemMonitor::new())),
         }
     }
 
-    fn build_output(config: &Config) -> Arc<dyn OutputDestination> {
-        let mut multi_output = MultiOutput::new();
-
-        if config.output.console_enabled {
-            let console = Box::new(ConsoleOutput::new(config.output.colored_output));
-            multi_output = multi_output.add_output(console);
-        }
-
-        if config.output.file_enabled {
-            if let Some(file_path) = &config.output.file_path {
-                if config.output.max_file_size > 0 && config.output.max_files > 1 {
-                    match RotatingFileOutput::new(
-                        file_path,
-                        config.output.max_file_size,
-                        config.output.max_files,
-                        config.output.json_format,
-                    ) {
-                        Ok(rotating) => {
-                            multi_output = multi_output.add_output(Box::new(rotating));
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to create rotating file output: {}", e);
-                            if let Ok(file) = FileOutput::new(file_path, config.output.json_format)
-                            {
-                                multi_output = multi_output.add_output(Box::new(file));
-                            }
-                        }
-                    }
-                } else {
-                    if let Ok(file) = FileOutput::new(file_path, config.output.json_format) {
-                        multi_output = multi_output.add_output(Box::new(file));
-                    }
-                }
-            }
-        }
-        let output: Arc<dyn OutputDestination> = Arc::new(multi_output);
-
-        let output = if config.performance.buffering_enabled {
-            Arc::new(BufferedOutput::new(output, config.performance.buffer_size))
-        } else {
-            output
-        };
-
-        #[cfg(feature = "async")]
-        let output = if config.performance.async_enabled {
-            match AsyncOutput::new(output.clone()) {
-                Ok(async_output) => Arc::new(async_output) as Arc<dyn OutputDestination>,
-                Err(e) => {
-                    eprintln!("Failed to create async output: {}", e);
-                    output
-                }
-            }
-        } else {
-            output
-        };
-
-        #[cfg(not(feature = "async"))]
-        let output = output;
-
-        output
+    pub fn debug(&self, m: &str) {
+        self.log(LogLevel::Debug, m, None);
+    }
+    pub fn info(&self, m: &str) {
+        self.log(LogLevel::Info, m, None);
+    }
+    pub fn warning(&self, m: &str) {
+        self.log(LogLevel::Warning, m, None);
+    }
+    pub fn error(&self, m: &str) {
+        self.log(LogLevel::Error, m, None);
+    }
+    pub fn critical(&self, m: &str) {
+        self.log(LogLevel::Critical, m, None);
     }
 
-    /// Returns the logger's name.
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn debug_with(&self, m: &str, d: &[(&str, &str)]) {
+        self.log(LogLevel::Debug, m, Some(d));
+    }
+    pub fn info_with(&self, m: &str, d: &[(&str, &str)]) {
+        self.log(LogLevel::Info, m, Some(d));
+    }
+    pub fn warning_with(&self, m: &str, d: &[(&str, &str)]) {
+        self.log(LogLevel::Warning, m, Some(d));
+    }
+    pub fn error_with(&self, m: &str, d: &[(&str, &str)]) {
+        self.log(LogLevel::Error, m, Some(d));
+    }
+    pub fn critical_with(&self, m: &str, d: &[(&str, &str)]) {
+        self.log(LogLevel::Critical, m, Some(d));
     }
 
-    /// Returns a reference to the component tracker.
-    pub fn get_component_tracker(&self) -> &ComponentTracker {
-        &self.component_tracker
-    }
-
-    /// Updates the logger configuration.
-    ///
-    /// # Note
-    ///
-    /// Output destinations cannot be changed dynamically. Create a new logger instance
-    /// for configuration changes to fully take effect.
-    pub fn set_config(&self, config: Config) {
-        if let Err(e) = config.validate() {
-            eprintln!("Invalid configuration: {}", e);
-            return;
-        }
-
-        let _new_output = Self::build_output(&config);
-        *self.config.write() = config;
-
-        eprintln!("Warning: Configuration updated but output destinations remain unchanged");
-        eprintln!(
-            "Consider creating a new logger instance for the new configuration to take full effect"
-        );
-    }
-
-    /// Returns a copy of the current configuration.
-    pub fn get_config(&self) -> Config {
-        self.config.read().clone()
-    }
-
-    /// Logs a debug-level message.
-    pub fn debug(&self, message: &str) {
-        self.log(LogLevel::Debug, message, None);
-    }
-
-    /// Logs a debug-level message with structured data.
-    pub fn debug_with(&self, message: &str, data: &[(&str, &str)]) {
-        self.log(LogLevel::Debug, message, Some(data));
-    }
-
-    /// Logs an info-level message.
-    pub fn info(&self, message: &str) {
-        self.log(LogLevel::Info, message, None);
-    }
-
-    /// Logs an info-level message with structured data.
-    pub fn info_with(&self, message: &str, data: &[(&str, &str)]) {
-        self.log(LogLevel::Info, message, Some(data));
-    }
-
-    /// Logs a warning-level message.
-    pub fn warning(&self, message: &str) {
-        self.log(LogLevel::Warning, message, None);
-    }
-
-    /// Logs a warning-level message with structured data.
-    pub fn warning_with(&self, message: &str, data: &[(&str, &str)]) {
-        self.log(LogLevel::Warning, message, Some(data));
-    }
-
-    /// Logs an error-level message.
-    pub fn error(&self, message: &str) {
-        self.log(LogLevel::Error, message, None);
-    }
-
-    /// Logs an error-level message with structured data.
-    pub fn error_with(&self, message: &str, data: &[(&str, &str)]) {
-        self.log(LogLevel::Error, message, Some(data));
-    }
-
-    /// Logs a critical-level message.
-    pub fn critical(&self, message: &str) {
-        self.log(LogLevel::Critical, message, None);
-    }
-
-    /// Logs a critical-level message with structured data.
-    pub fn critical_with(&self, message: &str, data: &[(&str, &str)]) {
-        self.log(LogLevel::Critical, message, Some(data));
-    }
-
-    /// Logs a message with a specific level and structured data.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use telelog::{Logger, LogLevel};
-    ///
-    /// let logger = Logger::new("app");
-    /// logger.log_with(LogLevel::Info, "User action", &[
-    ///     ("user_id", "12345"),
-    ///     ("action", "login"),
-    /// ]);
-    /// ```
     pub fn log_with(&self, level: LogLevel, message: &str, data: &[(&str, &str)]) {
         self.log(level, message, Some(data));
     }
 
-    /// Adds context that will be included in all subsequent log messages.
     pub fn add_context(&self, key: &str, value: &str) {
-        self.context.write().add(key, value);
+        self.context.add(key, value);
     }
-
-    /// Removes a specific key from the context.
     pub fn remove_context(&self, key: &str) {
-        self.context.write().remove(key);
+        self.context.remove(key);
     }
-
-    /// Clears all context key-value pairs.
     pub fn clear_context(&self) {
-        self.context.write().clear();
+        self.context.clear();
     }
 
-    /// Adds temporary context that will be automatically removed when the guard is dropped.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use telelog::Logger;
-    ///
-    /// let logger = Logger::new("app");
-    /// {
-    ///     let _guard = logger.with_context("request_id", "12345");
-    ///     logger.info("Processing request"); // includes request_id
-    /// } // request_id is automatically removed here
-    /// logger.info("After request"); // no request_id
-    /// ```
     pub fn with_context(&self, key: &str, value: &str) -> crate::context::ContextGuard {
-        self.context.write().add(key, value);
+        self.context.add(key, value);
         crate::context::ContextGuard::new(key.to_string(), Arc::clone(&self.context))
     }
 
-    /// Starts profiling an operation. Returns a guard that logs duration when dropped.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use telelog::Logger;
-    ///
-    /// let logger = Logger::new("app");
-    /// {
-    ///     let _guard = logger.profile("database_query");
-    ///     // Query execution...
-    /// } // Duration automatically logged
-    /// ```
-    pub fn profile(&self, operation: &str) -> ProfileGuard {
-        ProfileGuard::new(operation, self.clone())
+    #[inline]
+    fn log(&self, level: LogLevel, message: &str, data: Option<&[(&str, &str)]>) {
+        if (level as u8) < self.min_level.load(Ordering::Relaxed) {
+            return;
+        }
+
+        TIMESTAMP_BUF.with(|buf| {
+            let mut b = buf.borrow_mut();
+            b.clear();
+            let _ = write!(b, "{}", chrono::Utc::now().to_rfc3339());
+
+            let record = LogRecord {
+                timestamp: &b,
+                level,
+                logger: &self.name,
+                message,
+                context: &*self.context.data.read(),
+                data,
+            };
+
+            if let Err(e) = self.output.load().0.write(&record) {
+                eprintln!("[Telelog] Write error: {}", e);
+            }
+        });
     }
 
-    /// Starts tracking a component. Returns a guard that marks completion when dropped.
-    ///
-    /// With `system-monitor` feature, automatically tracks memory usage.
-    pub fn track_component(&self, name: &str) -> ComponentGuard {
-        #[cfg(feature = "system-monitor")]
-        {
-            ComponentGuard::new_with_monitor(
-                name,
-                Arc::clone(&self.component_tracker),
-                Arc::clone(&self.system_monitor),
-            )
-        }
-        #[cfg(not(feature = "system-monitor"))]
-        {
-            ComponentGuard::new(name, Arc::clone(&self.component_tracker))
+    pub fn set_config(&self, config: Config) {
+        if config.validate().is_ok() {
+            self.min_level
+                .store(config.min_level as u8, Ordering::Release);
+            let new_pipeline = Arc::new(OutputPipeline(build_output_pipeline(&config)));
+            self.output.store(new_pipeline);
+            self.config.store(Arc::new(config));
         }
     }
 
-    /// Returns a reference to the component tracker for advanced operations.
+    pub fn get_config(&self) -> Config {
+        (**self.config.load()).clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn get_component_tracker(&self) -> &ComponentTracker {
+        &self.component_tracker
+    }
     pub fn component_tracker(&self) -> &Arc<ComponentTracker> {
         &self.component_tracker
     }
 
-    /// Generates a visualization diagram from tracked components.
-    ///
-    /// # Arguments
-    ///
-    /// * `chart_type` - The type of chart to generate (Flowchart, Timeline, or Gantt)
-    /// * `output_path` - Optional path to save the generated diagram
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use telelog::{Logger, ChartType};
-    ///
-    /// let logger = Logger::new("app");
-    /// let diagram = logger.generate_visualization(ChartType::Flowchart, Some("chart.mmd")).unwrap();
-    /// ```
+    pub fn profile(&self, op: &str) -> crate::profile::ProfileGuard {
+        crate::profile::ProfileGuard::new(op, self.clone())
+    }
+
+    pub fn track_component(&self, name: &str) -> ComponentGuard {
+        #[cfg(feature = "system-monitor")]
+        return ComponentGuard::new_with_monitor(
+            name,
+            Arc::clone(&self.component_tracker),
+            Arc::clone(&self.system_monitor),
+        );
+        #[cfg(not(feature = "system-monitor"))]
+        return ComponentGuard::new(name, Arc::clone(&self.component_tracker));
+    }
+
     pub fn generate_visualization(
         &self,
         chart_type: crate::visualization::ChartType,
         output_path: Option<&str>,
     ) -> Result<String, String> {
-        use crate::visualization::{ChartConfig, MermaidGenerator};
-
-        let config = ChartConfig::new().with_chart_type(chart_type);
-        let generator = MermaidGenerator::new(config);
+        let generator = crate::visualization::MermaidGenerator::new(
+            crate::visualization::ChartConfig::new().with_chart_type(chart_type),
+        );
         let diagram = generator.generate_diagram(&self.component_tracker)?;
-
         if let Some(path) = output_path {
-            std::fs::write(path, &diagram)
-                .map_err(|e| format!("Failed to write diagram to file: {}", e))?;
+            std::fs::write(path, &diagram).map_err(|e| e.to_string())?;
         }
-
         Ok(diagram)
     }
 
-    /// Returns a reference to the system monitor (requires `system-monitor` feature).
     #[cfg(feature = "system-monitor")]
-    pub fn system_monitor(&self) -> &Arc<RwLock<SystemMonitor>> {
+    pub fn system_monitor(&self) -> &Arc<parking_lot::RwLock<SystemMonitor>> {
         &self.system_monitor
-    }
-
-    /// Internal logging implementation with thread-local buffer optimization.
-    fn log(&self, level: LogLevel, message: &str, data: Option<&[(&str, &str)]>) {
-        let config = self.config.read();
-
-        if !level.should_log(config.min_level) {
-            return;
-        }
-
-        LOG_BUFFER.with(|buffer| {
-            let mut log_data = buffer.borrow_mut();
-            log_data.clear();
-
-            let timestamp = TIMESTAMP_BUFFER.with(|ts_buf| {
-                let mut ts = ts_buf.borrow_mut();
-                ts.clear();
-                use std::fmt::Write;
-                write!(ts, "{}", chrono::Utc::now().to_rfc3339()).unwrap();
-                ts.clone()
-            });
-
-            log_data.insert("timestamp".to_string(), Value::String(timestamp));
-            log_data.insert("level".to_string(), Value::String(level.to_string()));
-            log_data.insert("logger".to_string(), Value::String(self.name.clone()));
-            log_data.insert("message".to_string(), Value::String(message.to_string()));
-
-            let context = self.context.read();
-            for (key, value) in context.iter() {
-                log_data.insert(key.clone(), Value::String(value.clone()));
-            }
-            drop(context);
-
-            if let Some(data) = data {
-                for (key, value) in data {
-                    log_data.insert(key.to_string(), Value::String(value.to_string()));
-                }
-            }
-
-            if let Err(e) = self.output.write(level, &log_data) {
-                eprintln!("Failed to write log: {}", e);
-            }
-        });
     }
 }
 
 impl Clone for Logger {
     fn clone(&self) -> Self {
         Self {
-            name: self.name.clone(),
-            config: Arc::clone(&self.config),
+            name: Arc::clone(&self.name),
+            min_level: AtomicU8::new(self.min_level.load(Ordering::Relaxed)),
+            config: ArcSwap::from(self.config.load_full()),
+            output: ArcSwap::from(self.output.load_full()),
             context: Arc::clone(&self.context),
-            output: Arc::clone(&self.output),
             component_tracker: Arc::clone(&self.component_tracker),
             #[cfg(feature = "system-monitor")]
             system_monitor: Arc::clone(&self.system_monitor),
@@ -428,49 +202,63 @@ impl Clone for Logger {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) fn build_output_pipeline(config: &Config) -> Arc<dyn OutputDestination> {
+    use crate::output::{
+        BufferedOutput, ConsoleOutput, FileOutput, MultiOutput, RotatingFileOutput,
+    };
+    let mut multi_output = MultiOutput::new();
 
-    #[test]
-    fn test_logger_creation() {
-        let logger = Logger::new("test");
-        assert_eq!(logger.name(), "test");
+    if config.output.console_enabled {
+        let console = Box::new(ConsoleOutput::new(config.output.colored_output));
+        multi_output = multi_output.add_output(console);
     }
 
-    #[test]
-    fn test_logging_methods() {
-        let logger = Logger::new("test");
-
-        // These should not panic
-        logger.debug("Debug message");
-        logger.info("Info message");
-        logger.warning("Warning message");
-        logger.error("Error message");
-        logger.critical("Critical message");
+    if config.output.file_enabled {
+        if let Some(file_path) = &config.output.file_path {
+            if config.output.max_file_size > 0 && config.output.max_files > 1 {
+                match RotatingFileOutput::new(
+                    file_path,
+                    config.output.max_file_size,
+                    config.output.max_files,
+                    config.output.json_format,
+                ) {
+                    Ok(rotating) => {
+                        multi_output = multi_output.add_output(Box::new(rotating));
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to create rotating file output: {}", e);
+                        if let Ok(file) = FileOutput::new(file_path, config.output.json_format) {
+                            multi_output = multi_output.add_output(Box::new(file));
+                        }
+                    }
+                }
+            } else {
+                if let Ok(file) = FileOutput::new(file_path, config.output.json_format) {
+                    multi_output = multi_output.add_output(Box::new(file));
+                }
+            }
+        }
     }
+    let output: Arc<dyn OutputDestination> = Arc::new(multi_output);
 
-    #[test]
-    fn test_context_management() {
-        let logger = Logger::new("test");
+    let output = if config.performance.buffering_enabled {
+        Arc::new(BufferedOutput::new(output, config.performance.buffer_size))
+    } else {
+        output
+    };
 
-        logger.add_context("user_id", "12345");
-        logger.add_context("session_id", "abcdef");
+    #[cfg(feature = "async")]
+    let output = if config.performance.async_enabled {
+        match crate::async_output::AsyncOutput::new(output.clone()) {
+            Ok(async_output) => Arc::new(async_output) as Arc<dyn OutputDestination>,
+            Err(e) => {
+                eprintln!("Failed to create async output: {}", e);
+                output
+            }
+        }
+    } else {
+        output
+    };
 
-        // Context should be included in logs
-        logger.info("Test message with context");
-
-        logger.remove_context("user_id");
-        logger.clear_context();
-    }
-
-    #[test]
-    fn test_config_update() {
-        let logger = Logger::new("test");
-        let new_config = Config::new().with_min_level(LogLevel::Warning);
-
-        logger.set_config(new_config);
-        let current_config = logger.get_config();
-        assert_eq!(current_config.min_level, LogLevel::Warning);
-    }
+    output
 }
